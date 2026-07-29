@@ -43,7 +43,6 @@ include(
     ":magisk-loader",
     ":libxposed:api",
     ":libxposed:service",
-    ":libxposed:compat",
     ":services:manager-service",
     ":services:daemon-service",
 )
