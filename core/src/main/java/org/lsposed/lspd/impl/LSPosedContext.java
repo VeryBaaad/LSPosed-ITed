@@ -1,5 +1,7 @@
 package org.lsposed.lspd.impl;
 
+import static org.lsposed.lspd.util.MetaDataReader.extractIntPart;
+
 import android.annotation.SuppressLint;
 import android.app.ActivityThread;
 import android.content.SharedPreferences;
@@ -16,21 +18,30 @@ import androidx.annotation.Nullable;
 
 import org.lsposed.lspd.core.BuildConfig;
 import org.lsposed.lspd.models.Module;
+import org.lsposed.lspd.nativebridge.HookBridge;
 import org.lsposed.lspd.nativebridge.NativeAPI;
 import org.lsposed.lspd.service.ILSPInjectedModuleService;
 import org.lsposed.lspd.util.LspModuleClassLoader;
 
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Executable;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.Proxy;
 import java.net.UnknownHostException;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 import io.github.libxposed.api.XposedInterface;
 import io.github.libxposed.api.XposedModule;
@@ -54,16 +65,30 @@ public class LSPosedContext implements XposedInterface {
     private final ILSPInjectedModuleService service;
     private final ExceptionMode mDefaultExceptionMode;
     private final Map<String, SharedPreferences> mRemotePrefs = new ConcurrentHashMap<>();
+    private static int targetApiVersion = 101;
 
+    LSPosedContext(String packageName, ApplicationInfo applicationInfo, ILSPInjectedModuleService service) {
+        this.mPackageName = packageName;
+        this.mApplicationInfo = applicationInfo;
+        this.service = service;
+        this.mDefaultExceptionMode = ExceptionMode.DEFAULT;
+        targetApiVersion = 100;
+    }
     LSPosedContext(String packageName, ApplicationInfo applicationInfo, ILSPInjectedModuleService service,
-                   ExceptionMode defaultExceptionMode) {
+                   ExceptionMode defaultExceptionMode, int ApiVersion) {
         this.mPackageName = packageName;
         this.mApplicationInfo = applicationInfo;
         this.service = service;
         this.mDefaultExceptionMode = defaultExceptionMode;
+        targetApiVersion = ApiVersion;
+    }
+
+    private static boolean isOutdatedModern(int targetApi) {
+        return targetApi <= 100;
     }
 
     public static void callOnPackageLoaded(XposedModuleInterface.PackageLoadedParam param) {
+        if (isOutdatedModern(targetApiVersion)) { return; }
         for (XposedModule module : modules) {
             try {
                 module.onPackageLoaded(param);
@@ -74,11 +99,50 @@ public class LSPosedContext implements XposedInterface {
     }
 
     public static void callOnPackageReady(XposedModuleInterface.PackageReadyParam param) {
-        for (XposedModule module : modules) {
-            try {
-                module.onPackageReady(param);
-            } catch (Throwable t) {
-                Log.e(TAG, "Error when calling onPackageReady of " + module.getModuleApplicationInfo().packageName, t);
+        if (isOutdatedModern(targetApiVersion)) {
+            for (XposedModule module : modules) {
+                try {
+                    module.onPackageLoaded(new XposedModuleInterface.PackageLoadedParam() {
+                        @NonNull
+                        @Override
+                        public String getPackageName() {
+                            return param.getPackageName();
+                        }
+
+                        @NonNull
+                        @Override
+                        public ApplicationInfo getApplicationInfo() {
+                            return param.getApplicationInfo();
+                        }
+
+                        @Override
+                        public boolean isFirstPackage() {
+                            return param.isFirstPackage();
+                        }
+
+                        @NonNull
+                        @Override
+                        public ClassLoader getDefaultClassLoader() {
+                            return param.getDefaultClassLoader();
+                        }
+
+                        @NonNull
+                        @Override
+                        public ClassLoader getClassLoader() {
+                            return param.getClassLoader();
+                        }
+                    });
+                } catch (Throwable t) {
+                    Log.e(TAG, "Error when calling onPackageLoaded of " + module.getModuleApplicationInfo().packageName, t);
+                }
+            }
+        } else {
+            for (XposedModule module : modules) {
+                try {
+                    module.onPackageReady(param);
+                } catch (Throwable t) {
+                    Log.e(TAG, "Error when calling onPackageReady of " + module.getModuleApplicationInfo().packageName, t);
+                }
             }
         }
     }
@@ -111,9 +175,28 @@ public class LSPosedContext implements XposedInterface {
                 Log.e(TAG, "  This may cause strange issues and must be fixed by the module developer.");
                 return false;
             }
-            module.file.moduleLibraryNames.forEach(NativeAPI::recordNativeEntrypoint);
-            var defaultExceptionMode = module.file.exceptionPassthrough ? ExceptionMode.PASSTHROUGH : ExceptionMode.PROTECTIVE;
-            var ctx = new LSPosedContext(module.packageName, module.applicationInfo, module.service, defaultExceptionMode);
+            try {
+                ZipFile zipFile = new ZipFile(module.apkPath);
+                ZipEntry propEntry = zipFile.getEntry("META-INF/xposed/module.prop");
+                if (propEntry == null) {
+                    Log.e(TAG, "Error on load base of " + module.apkPath + " because prop entry is null");
+                }
+                Properties prop = new Properties();
+                try (InputStream in = zipFile.getInputStream(propEntry)) {
+                    prop.load(in);
+                }
+                targetApiVersion = extractIntPart(prop.getProperty("targetApiVersion"));
+                zipFile.close();
+            } catch (Throwable e) {
+                Log.e(TAG, "Error on load base of " + module.apkPath, e);
+            }
+            if (isOutdatedModern(targetApiVersion)) {
+                var ctx = new LSPosedContext(module.packageName, module.applicationInfo, module.service);
+            } else {
+                module.file.moduleLibraryNames.forEach(NativeAPI::recordNativeEntrypoint);
+                var defaultExceptionMode = module.file.exceptionPassthrough ? ExceptionMode.PASSTHROUGH : ExceptionMode.PROTECTIVE;
+                var ctx = new LSPosedContext(module.packageName, module.applicationInfo, module.service, defaultExceptionMode, targetApiVersion);
+            }
             for (var entry : module.file.moduleClassNames) {
                 var moduleClass = mcl.loadClass(entry);
                 Log.d(TAG, "  Loading class " + moduleClass);
@@ -122,24 +205,43 @@ public class LSPosedContext implements XposedInterface {
                     continue;
                 }
                 try {
-                    var moduleContext = (XposedModule) moduleClass.getConstructor().newInstance();
-                    moduleContext.attachFramework(ctx);
-                    moduleContext.onModuleLoaded(new XposedModuleInterface.ModuleLoadedParam() {
-                        @Override
-                        public boolean isSystemServer() {
-                            return isSystemServer;
-                        }
+                    if (isOutdatedModern(targetApiVersion)) {
+                        var moduleEntry = moduleClass.getConstructor(XposedInterface.class, XposedModuleInterface.ModuleLoadedParam.class);
+                        var moduleContext = (XposedModule) moduleEntry.newInstance(ctx, new XposedModuleInterface.ModuleLoadedParam() {
+                            @Override
+                            public boolean isSystemServer() {
+                                return isSystemServer;
+                            }
 
-                        @NonNull
-                        @Override
-                        public String getProcessName() {
-                            return processName;
-                        }
-                    });
+                            @NonNull
+                            @Override
+                            public String getProcessName() {
+                                return processName;
+                            }
+                        });
+                    } else {
+                        var moduleContext = (XposedModule) moduleClass.getConstructor().newInstance();
+                        moduleContext.attachFramework(ctx);
+                        moduleContext.onModuleLoaded(new XposedModuleInterface.ModuleLoadedParam() {
+                            @Override
+                            public boolean isSystemServer() {
+                                return isSystemServer;
+                            }
+
+                            @NonNull
+                            @Override
+                            public String getProcessName() {
+                                return processName;
+                            }
+                        });
+                    }
                     modules.add(moduleContext);
                 } catch (Throwable e) {
                     Log.e(TAG, "    Failed to load class " + moduleClass, e);
                 }
+            }
+            if (isOutdatedModern(targetApiVersion)) {
+                module.file.moduleLibraryNames.forEach(NativeAPI::recordNativeEntrypoint);
             }
             Log.d(TAG, "Loaded module " + module.packageName + ": " + ctx);
         } catch (Throwable e) {
@@ -167,12 +269,128 @@ public class LSPosedContext implements XposedInterface {
     }
 
     @Override
+    public int getFrameworkPrivilege() {
+        try {
+            return service.getFrameworkPrivilege();
+        } catch (RemoteException e) {
+            throw new XposedFrameworkError(e);
+        }
+    }
+
+    @Override
     public long getFrameworkProperties() {
         try {
             return service.getFrameworkProperties();
         } catch (RemoteException e) {
             throw new XposedFrameworkError(e);
         }
+    }
+
+    @NonNull
+    @Override
+    public MethodUnhooker<Method> hook(@NonNull Method origin, @NonNull Class<? extends Hooker> hooker) {
+        return LSPosedBridge.doHook(origin, PRIORITY_DEFAULT, hooker);
+    }
+
+    @NonNull
+    @Override
+    public MethodUnhooker<Method> hook(@NonNull Method origin, int priority, @NonNull Class<? extends Hooker> hooker) {
+        return LSPosedBridge.doHook(origin, priority, hooker);
+    }
+
+    @NonNull
+    @Override
+    public <T> MethodUnhooker<Constructor<T>> hook(@NonNull Constructor<T> origin, @NonNull Class<? extends Hooker> hooker) {
+        return LSPosedBridge.doHook(origin, PRIORITY_DEFAULT, hooker);
+    }
+
+    @NonNull
+    @Override
+    public <T> MethodUnhooker<Constructor<T>> hook(@NonNull Constructor<T> origin, int priority, @NonNull Class<? extends Hooker> hooker) {
+        return LSPosedBridge.doHook(origin, priority, hooker);
+    }
+
+    @NonNull
+    @Override
+    public <T> MethodUnhooker<Constructor<T>> hookClassInitializer(@NonNull Class<T> origin, @NonNull Class<? extends Hooker> hooker) {
+        return LSPosedBridge.doHookClassInitializer(origin, PRIORITY_DEFAULT, hooker);
+    }
+
+    @NonNull
+    @Override
+    public <T> MethodUnhooker<Constructor<T>> hookClassInitializer(@NonNull Class<T> origin, int priority, @NonNull Class<? extends Hooker> hooker) {
+        return LSPosedBridge.doHookClassInitializer(origin, priority, hooker);
+    }
+
+    private static boolean doDeoptimize(@NonNull Executable method) {
+        if (Modifier.isAbstract(method.getModifiers())) {
+            throw new IllegalArgumentException("Cannot deoptimize abstract methods: " + method);
+        } else if (Proxy.isProxyClass(method.getDeclaringClass())) {
+            throw new IllegalArgumentException("Cannot deoptimize methods from proxy class: " + method);
+        }
+        return HookBridge.deoptimizeMethod(method);
+    }
+
+    @Override
+    public boolean deoptimize(@NonNull Method method) {
+        return doDeoptimize(method);
+    }
+
+    @Override
+    public <T> boolean deoptimize(@NonNull Constructor<T> constructor) {
+        return doDeoptimize(constructor);
+    }
+
+    @Nullable
+    @Override
+    public Object invokeOrigin(@NonNull Method method, @Nullable Object thisObject, Object... args) throws InvocationTargetException, IllegalArgumentException, IllegalAccessException {
+        return HookBridge.invokeOriginalMethod(method, thisObject, args);
+    }
+
+    @Override
+    public <T> void invokeOrigin(@NonNull Constructor<T> constructor, @NonNull T thisObject, Object... args) throws InvocationTargetException, IllegalArgumentException, IllegalAccessException {
+        HookBridge.invokeOriginalMethod(constructor, thisObject, args);
+    }
+
+    @Nullable
+    @Override
+    public Object invokeSpecial(@NonNull Method method, @NonNull Object thisObject, Object... args) throws InvocationTargetException, IllegalArgumentException, IllegalAccessException {
+        if (Modifier.isStatic(method.getModifiers())) {
+            throw new IllegalArgumentException("Cannot invoke special on static method: " + method);
+        }
+        try {
+            return HookBridge.invokeSpecialMethod(method, thisObject, args);
+        } catch (InstantiationException e) {
+            throw new InstantiationError(e.getMessage());
+        }
+    }
+
+    @Override
+    public <T> void invokeSpecial(@NonNull Constructor<T> constructor, @NonNull T thisObject, Object... args) throws InvocationTargetException, IllegalArgumentException, IllegalAccessException {
+        if (Modifier.isStatic(constructor.getModifiers())) {
+            throw new IllegalArgumentException("Cannot invoke special on static constructor: " + constructor);
+        }
+        try {
+            HookBridge.invokeSpecialMethod(constructor, thisObject, args);
+        } catch (InstantiationException e) {
+            throw new InstantiationError(e.getMessage());
+        }
+    }
+
+    @NonNull
+    @Override
+    public <T> T newInstanceOrigin(@NonNull Constructor<T> constructor, Object... args) throws InvocationTargetException, IllegalArgumentException, IllegalAccessException, InstantiationException {
+        return (T) HookBridge.invokeOriginalMethod(constructor, null, args);
+    }
+
+    @NonNull
+    @Override
+    public <T, U> U newInstanceSpecial(@NonNull Constructor<T> constructor, @NonNull Class<U> subClass, Object... args) throws InvocationTargetException, IllegalArgumentException, IllegalAccessException, InstantiationException {
+        var superClass = constructor.getDeclaringClass();
+        if (!superClass.isAssignableFrom(subClass)) {
+            throw new IllegalArgumentException(subClass + " is not inherited from " + superClass);
+        }
+        return (U) HookBridge.invokeSpecialMethod(constructor, subClass, null, args);
     }
 
     @Override
@@ -202,6 +420,16 @@ public class LSPosedContext implements XposedInterface {
     @Override
     public <T> CtorInvoker<T> getInvoker(@NonNull Constructor<T> constructor) {
         return LSPosedBridge.newInvoker(constructor);
+    }
+
+    @Override
+    public void log(@NonNull String message) {
+        log(Log.INFO, "null", message, null);
+    }
+
+    @Override
+    public void log(@NonNull String message, @NonNull Throwable throwable) {
+        log(Log.ERROR, "null", message, throwable);
     }
 
     @Override
@@ -237,6 +465,12 @@ public class LSPosedContext implements XposedInterface {
 
         writer.flush();
         Log.println(priority, TAG, output.toString());
+    }
+
+    @NonNull
+    @Override
+    public ApplicationInfo getApplicationInfo() {
+        return mApplicationInfo;
     }
 
     @NonNull

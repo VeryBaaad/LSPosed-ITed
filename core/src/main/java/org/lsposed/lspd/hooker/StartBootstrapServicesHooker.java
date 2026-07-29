@@ -35,6 +35,31 @@ import io.github.libxposed.api.XposedModuleInterface;
 
 public class StartBootstrapServicesHooker implements XposedInterface.Hooker {
 
+    public static void before() {
+        logD("SystemServer#startBootstrapServices() starts");
+
+        try {
+            XposedInit.loadedPackagesInProcess.add("android");
+
+            XC_LoadPackage.LoadPackageParam lpparam = new XC_LoadPackage.LoadPackageParam(XposedBridge.sLoadedPackageCallbacks);
+            lpparam.packageName = "android";
+            lpparam.processName = "android"; // it's actually system_server, but other functions return this as well
+            lpparam.classLoader = HandleSystemServerProcessHooker.systemServerCL;
+            lpparam.appInfo = null;
+            lpparam.isFirstApplication = true;
+            XC_LoadPackage.callAll(lpparam);
+
+            LSPosedContext.callOnSystemServerLoaded(new XposedModuleInterface.SystemServerLoadedParam() {
+                @Override
+                @NonNull
+                public ClassLoader getClassLoader() {
+                    return HandleSystemServerProcessHooker.systemServerCL;
+                }
+            });
+        } catch (Throwable t) {
+            Hookers.logE("error when hooking startBootstrapServices", t);
+        }
+    }
     @Override
     public Object intercept(XposedInterface.Chain chain) throws Throwable {
         logD("SystemServer#startBootstrapServices() starts");

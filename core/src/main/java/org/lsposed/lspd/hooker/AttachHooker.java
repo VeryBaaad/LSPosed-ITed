@@ -7,6 +7,9 @@ import io.github.libxposed.api.XposedInterface;
 
 public class AttachHooker implements XposedInterface.Hooker {
 
+    public static void after(XposedInterface.AfterHookCallback callback) {
+        XposedInit.loadModules((ActivityThread) callback.getThisObject());
+    }
     @Override
     public Object intercept(XposedInterface.Chain chain) throws Throwable {
         var result = chain.proceed();

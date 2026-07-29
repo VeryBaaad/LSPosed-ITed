@@ -437,10 +437,6 @@ public class ConfigFileManager {
         if (apkFile.getEntry("META-INF/xposed/java_init.list") == null) return null;
         var properties = readModuleProperties(apkFile);
         if (properties == null) return null;
-        int minApiVersion = readApiVersion(properties, "minApiVersion");
-        int targetApiVersion = readApiVersion(properties, "targetApiVersion");
-        if (minApiVersion > LSPModuleService.XPOSED_API_VERSION) return null;
-        if (targetApiVersion < LSPModuleService.XPOSED_API_VERSION) return null;
         return properties;
     }
 
@@ -450,7 +446,7 @@ public class ConfigFileManager {
         int minApiVersion = readApiVersion(properties, "minApiVersion");
         int targetApiVersion = readApiVersion(properties, "targetApiVersion");
         return minApiVersion > LSPModuleService.XPOSED_API_VERSION
-                || targetApiVersion >= LSPModuleService.XPOSED_API_VERSION;
+                || targetApiVersion >= 100;
     }
 
     private static boolean isExceptionPassthrough(Properties properties) {
@@ -470,14 +466,13 @@ public class ConfigFileManager {
         try (var apkFile = new ZipFile(toGlobalNamespace(path))) {
             readDexes(apkFile, preLoadedDexes, obfuscate);
             var properties = readModuleProperties(apkFile);
-            if (properties != null && readApiVersion(properties, "minApiVersion") > LSPModuleService.XPOSED_API_VERSION) {
-                return null;
-            }
-            if (properties != null && readApiVersion(properties, "targetApiVersion") >= LSPModuleService.XPOSED_API_VERSION) {
+            if (properties != null && readApiVersion(properties, "targetApiVersion") >= 100) {
                 file.legacy = false;
                 readName(apkFile, "META-INF/xposed/java_init.list", moduleClassNames);
                 readName(apkFile, "META-INF/xposed/native_init.list", moduleLibraryNames);
-                file.exceptionPassthrough = isExceptionPassthrough(properties);
+                if (readApiVersion(properties, "targetApiVersion") > 100) {
+                    file.exceptionPassthrough = isExceptionPassthrough(properties);
+                }
             } else {
                 file.legacy = true;
                 readName(apkFile, "assets/xposed_init", moduleClassNames);
