@@ -17,21 +17,31 @@
  * Copyright (C) 2020 EdXposed Contributors
  * Copyright (C) 2021 LSPosed Contributors
  */
+package org.lsposed.lspd.nativebridge
 
-package org.lsposed.lspd.util;
+import android.content.res.Resources
+import android.content.res.XResources
+import dalvik.annotation.optimization.FastNative
 
-import android.app.ActivityThread;
+object ResourcesHook {
+    @JvmStatic
+    external fun initXResourcesNative(): Boolean
 
-public class Hookers {
+    @JvmStatic
+    external fun makeInheritable(clazz: Class<*>): Boolean
 
-    public static void logD(String prefix) {
-        Utils.logD(String.format("%s: pkg=%s, prc=%s", prefix, ActivityThread.currentPackageName(),
-            ActivityThread.currentProcessName()));
-    }
+    @JvmStatic
+    external fun buildDummyClassLoader(
+        parent: ClassLoader?,
+        resourceSuperClass: String?,
+        typedArraySuperClass: String?
+    ): ClassLoader?
 
-    public static void logE(String prefix, Throwable throwable) {
-        Utils.logE(String.format("%s: pkg=%s, prc=%s", prefix, ActivityThread.currentPackageName(),
-            ActivityThread.currentProcessName()), throwable);
-    }
-
+    @JvmStatic
+    @FastNative
+    external fun rewriteXmlReferencesNative(
+        parserPtr: Long,
+        origRes: XResources?,
+        repRes: Resources?
+    )
 }

@@ -17,9 +17,9 @@
  * Copyright (C) 2020 EdXposed Contributors
  * Copyright (C) 2021 LSPosed Contributors
  */
+package org.lsposed.lspd.nativebridge
 
-package org.lsposed.lspd.nativebridge;
-
-public class NativeAPI {
-    public static native void recordNativeEntrypoint(String library_name);
+object NativeAPI {
+    @JvmStatic
+    external fun recordNativeEntrypoint(libraryName: String)
 }

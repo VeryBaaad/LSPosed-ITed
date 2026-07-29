@@ -329,7 +329,7 @@ public final class XposedBridge {
             throw new IllegalArgumentException("method must be of type Method or Constructor");
         }
 
-        return HookBridge.invokeOriginalMethod((Executable) method, thisObject, args);
+        return HookBridge.invokeOriginalMethod(method, (Executable) method, thisObject, args);
     }
 
     /**
