@@ -4,11 +4,6 @@ plugins {
 
 android {
     namespace = "io.github.libxposed.api"
-    compileSdk {
-        version = release(37) {
-            minorApiLevel = 0
-        }
-    }
 
     sourceSets {
         named("main") {
