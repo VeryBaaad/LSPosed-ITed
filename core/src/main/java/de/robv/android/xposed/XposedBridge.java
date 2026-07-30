@@ -26,6 +26,7 @@ import android.content.res.TypedArray;
 import android.util.Log;
 
 import org.lsposed.lspd.impl.LSPosedBridge;
+import org.lsposed.lspd.impl.LSPosedHookCallback;
 import org.lsposed.lspd.nativebridge.HookBridge;
 import org.lsposed.lspd.nativebridge.ResourcesHook;
 
@@ -229,7 +230,7 @@ public final class XposedBridge {
         if (hookMethod instanceof Executable) {
             var hooker = legacyHookers.remove(new HookKey(hookMethod, callback));
             if (hooker != null) {
-                HookBridge.unhookMethod((Executable) hookMethod, hooker);
+                HookBridge.unhookMethod((Executable) hookMethod, hooker, false);
             }
         }
     }
@@ -457,6 +458,83 @@ public final class XposedBridge {
                 return param.result;
             }
             throw param.throwable;
+        }
+    }
+    public static class LegacyApiSupport<T extends Executable> {
+        private final XC_MethodHook.MethodHookParam<T> param;
+        private final LSPosedHookCallback<T> callback;
+        private final Object[] snapshot;
+
+        private int beforeIdx;
+
+        public LegacyApiSupport(LSPosedHookCallback<T> callback, Object[] legacySnapshot) {
+            this.param = new XC_MethodHook.MethodHookParam<>();
+            this.callback = callback;
+            this.snapshot = legacySnapshot;
+        }
+
+        public void handleBefore() {
+            syncronizeApi(param, callback, true);
+            for (beforeIdx = 0; beforeIdx < snapshot.length; beforeIdx++) {
+                try {
+                    var cb = (XC_MethodHook) snapshot[beforeIdx];
+                    cb.beforeHookedMethod(param);
+                } catch (Throwable t) {
+                    XposedBridge.log(t);
+
+                    // reset result (ignoring what the unexpectedly exiting callback did)
+                    param.setResult(null);
+                    param.returnEarly = false;
+                    continue;
+                }
+
+                if (param.returnEarly) {
+                    // skip remaining "before" callbacks and corresponding "after" callbacks
+                    beforeIdx++;
+                    break;
+                }
+            }
+            syncronizeApi(param, callback, false);
+        }
+
+        public void handleAfter() {
+            syncronizeApi(param, callback, true);
+            for (int afterIdx = beforeIdx - 1; afterIdx >= 0; afterIdx--) {
+                Object lastResult = param.getResult();
+                Throwable lastThrowable = param.getThrowable();
+                try {
+                    var cb = (XC_MethodHook) snapshot[afterIdx];
+                    cb.afterHookedMethod(param);
+                } catch (Throwable t) {
+                    XposedBridge.log(t);
+
+                    // reset to last result (ignoring what the unexpectedly exiting callback did)
+                    if (lastThrowable == null) {
+                        param.setResult(lastResult);
+                    } else {
+                        param.setThrowable(lastThrowable);
+                    }
+                }
+            }
+            syncronizeApi(param, callback, false);
+        }
+
+        private void syncronizeApi(XC_MethodHook.MethodHookParam<T> param, LSPosedHookCallback<T> callback, boolean forward) {
+            if (forward) {
+                param.method = callback.method;
+                param.thisObject = callback.thisObject;
+                param.args = callback.args;
+                param.result = callback.result;
+                param.throwable = callback.throwable;
+                param.returnEarly = callback.isSkipped;
+            } else {
+                callback.method = param.method;
+                callback.thisObject = param.thisObject;
+                callback.args = param.args;
+                callback.result = param.result;
+                callback.throwable = param.throwable;
+                callback.isSkipped = param.returnEarly;
+            }
         }
     }
 }

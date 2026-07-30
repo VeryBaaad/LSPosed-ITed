@@ -6,6 +6,8 @@ glide = "5.0.7"
 okhttp = "5.3.2"
 startupRuntime = "1.2.0"
 ndk = "29.0.13599879-beta2"
+libxposed-annotation = "1.0.0"
+libxposed-lint = "1.0.0"
 
 [plugins]
 agp-lib = { id = "com.android.library", version.ref = "agp" }
@@ -59,3 +61,6 @@ gson = { module = "com.google.code.gson:gson", version = "2.14.0" }
 hiddenapibypass = { module = "org.lsposed.hiddenapibypass:hiddenapibypass", version = "6.1" }
 kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version = "1.11.0" }
+
+libxposed-annotation = { group = "io.github.libxposed", name = "annotation", version.ref = "libxposed-annotation" }
+libxposed-lint = { group = "io.github.libxposed", name = "lint", version.ref = "libxposed-lint" }

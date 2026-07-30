@@ -29,6 +29,23 @@ public class ParasiticManagerSystemHooker implements HandleSystemServerProcessHo
     }*/
 
     private static class Hooker implements XposedInterface.Hooker {
+        public static void after(XposedInterface.AfterHookCallback callback) throws Throwable {
+            var intent = (Intent) callback.getArgs()[0];
+            if (intent == null) return;
+            if (!intent.hasCategory("org.lsposed.manager.LAUNCH_MANAGER")) return;
+            var aInfo = (ActivityInfo) callback.getResult();
+            if (aInfo == null || !"com.android.shell".equals(aInfo.packageName)) return;
+            // We shouldn't pollute system's object
+            aInfo = new ActivityInfo(aInfo);
+            // use a different process name
+            aInfo.processName = "org.lsposed.manager";
+            // choose a theme that has transition animation
+            aInfo.theme = android.R.style.Theme_DeviceDefault_Settings;
+            // remove some annoying flags
+            aInfo.flags = aInfo.flags & ~(ActivityInfo.FLAG_EXCLUDE_FROM_RECENTS | ActivityInfo.FLAG_FINISH_ON_CLOSE_SYSTEM_DIALOGS);
+            BridgeService.getService().preStartManager();
+            callback.setResult(aInfo);
+        }
         @Override
         public Object intercept(XposedInterface.Chain chain) throws Throwable {
             var result = chain.proceed();

@@ -6,8 +6,7 @@ android {
     namespace = "io.github.libxposed.api"
 
     sourceSets {
-        val main by getting
-        main.apply {
+        named("main") {
             setRoot("api/api/src/main")
         }
     }
@@ -16,11 +15,14 @@ android {
         buildConfig = false
     }
 
-    androidResources {
-        enable = false
+    compileOptions {
+        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_17
     }
 }
 
 dependencies {
     compileOnly(libs.androidx.annotation)
+    api(libs.libxposed.annotation)
+    lintPublish(libs.libxposed.lint)
 }

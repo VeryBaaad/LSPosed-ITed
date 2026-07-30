@@ -8,9 +8,9 @@ import java.lang.reflect.Method;
 import dalvik.annotation.optimization.FastNative;
 
 public class HookBridge {
-    public static native boolean hookMethod(Executable hookMethod, Class<?> hooker, int priority, Object callback);
+    public static native boolean hookMethod(Executable hookMethod, Class<?> hooker, int priority, Object callback, boolean api100);
 
-    public static native boolean unhookMethod(Executable hookMethod, Object callback);
+    public static native boolean unhookMethod(Executable hookMethod, Object callback, boolean api100);
 
     public static native boolean deoptimizeMethod(Executable method);
 
@@ -18,7 +18,7 @@ public class HookBridge {
 
     public static native <T> T allocateSpecialReceiver(Constructor<?> constructor, Class<T> clazz) throws InstantiationException;
 
-    public static native Method findClassInitializer(Class<?> clazz);
+    public static native Object findClassInitializer(Class<?> clazz, boolean api100);
 
     public static native Object invokeOriginalMethod(Executable method, Object thisObject, Object[] args, boolean isConstructor) throws IllegalAccessException, IllegalArgumentException, InvocationTargetException;
 
@@ -42,4 +42,6 @@ public class HookBridge {
     public static native boolean setTrusted(Object cookie);
 
     public static native Object[] callbackSnapshot(Executable method, int maxPriority);
+
+    public static native Object[][] oldCallbackSnapshot(Class<?> hooker_callback, Executable method);
 }
