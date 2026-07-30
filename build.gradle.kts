@@ -91,11 +91,11 @@ subprojects {
 
             externalNativeBuild.cmake.version = androidCmakeVersion
 
-            defaultConfig.targetSdk = androidTargetSdkVersion
             defaultConfig.minSdk = androidMinSdkVersion
             val applicationDefaultConfig = defaultConfig as? ApplicationDefaultConfig
             if (applicationDefaultConfig != null) {
                 applicationDefaultConfig.targetSdk = androidTargetSdkVersion
+                applicationDefaultConfig.minSdk = androidMinSdkVersion
                 applicationDefaultConfig.versionCode = verCode
                 applicationDefaultConfig.versionName = verName
             }
