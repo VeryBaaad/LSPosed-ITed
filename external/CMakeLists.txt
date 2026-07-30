@@ -12,6 +12,8 @@ SET_OPTION(DOBBY_GENERATE_SHARED OFF)
 SET_OPTION(Plugin.SymbolResolver OFF)
 SET_OPTION(FMT_INSTALL OFF)
 
+add_subdirectory(fmt)
+
 set(LIBCXX_SOURCES
         algorithm.cpp
 #        any.cpp
@@ -168,5 +170,4 @@ if (ANDROID_ABI STREQUAL "riscv64")
 else ()
 	add_subdirectory(dobby)
 endif ()
-add_subdirectory(fmt)
 target_compile_definitions(fmt-header-only INTERFACE FMT_USE_LOCALE=0 FMT_USE_FLOAT=0 FMT_USE_DOUBLE=0 FMT_USE_LONG_DOUBLE=0 FMT_USE_BITINT=0)
