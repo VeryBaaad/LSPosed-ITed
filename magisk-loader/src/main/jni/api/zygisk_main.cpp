@@ -45,6 +45,9 @@ namespace lspd {
         }
 
         void preAppSpecialize(zygisk::AppSpecializeArgs *args) override {
+            if (auto ptr = args->mount_sysprop_overrides) {
+                *ptr = false;
+            }
             MagiskLoader::GetInstance()->OnNativeForkAndSpecializePre(
                     env_, args->uid, args->gids, args->nice_name,
                     args->is_child_zygote ? *args->is_child_zygote : false, args->app_data_dir);
