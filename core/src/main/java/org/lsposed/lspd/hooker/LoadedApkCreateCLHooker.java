@@ -374,39 +374,4 @@ public class LoadedApkCreateCLHooker implements XposedInterface.Hooker {
             return (AppComponentFactory) XposedHelpers.getObjectField(loadedApk, "mAppComponentFactory");
         }
     }
-
-    private static void hookNewXSP(XC_LoadPackage.LoadPackageParam lpparam) {
-        int xposedminversion = -1;
-        boolean xposedsharedprefs = false;
-        try {
-            Map<String, Object> metaData = MetaDataReader.getMetaData(new File(lpparam.appInfo.sourceDir));
-            Object minVersionRaw = metaData.get("xposedminversion");
-            if (minVersionRaw instanceof Integer) {
-                xposedminversion = (Integer) minVersionRaw;
-            } else if (minVersionRaw instanceof String) {
-                xposedminversion = MetaDataReader.extractIntPart((String) minVersionRaw);
-            }
-            xposedsharedprefs = metaData.containsKey("xposedsharedprefs");
-        } catch (NumberFormatException | IOException e) {
-            Hookers.logE("ApkParser fails", e);
-        }
-
-        if (xposedminversion > 92 || xposedsharedprefs) {
-            Utils.logI("New modules detected, hook preferences");
-            XposedHelpers.findAndHookMethod("android.app.ContextImpl", lpparam.classLoader, "checkMode", int.class, new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    if (((int) param.args[0] & 1/*Context.MODE_WORLD_READABLE*/) != 0) {
-                        param.setThrowable(null);
-                    }
-                }
-            });
-            XposedHelpers.findAndHookMethod("android.app.ContextImpl", lpparam.classLoader, "getPreferencesDir", new XC_MethodReplacement() {
-                @Override
-                protected Object replaceHookedMethod(MethodHookParam param) {
-                    return new File(serviceClient.getPrefsPath(lpparam.packageName));
-                }
-            });
-        }
-    }
 }

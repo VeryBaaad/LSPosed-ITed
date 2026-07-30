@@ -88,7 +88,6 @@ public class LSPosedContext implements XposedInterface {
     }
 
     public static void callOnPackageLoaded(XposedModuleInterface.PackageLoadedParam param) {
-        if (isOutdatedModern(targetApiVersion)) { return; }
         for (XposedModule module : modules) {
             try {
                 module.onPackageLoaded(param);
@@ -99,50 +98,23 @@ public class LSPosedContext implements XposedInterface {
     }
 
     public static void callOnPackageReady(XposedModuleInterface.PackageReadyParam param) {
-        if (isOutdatedModern(targetApiVersion)) {
-            for (XposedModule module : modules) {
-                try {
-                    module.onPackageLoaded(new XposedModuleInterface.PackageLoadedParam() {
-                        @NonNull
-                        @Override
-                        public String getPackageName() {
-                            return param.getPackageName();
-                        }
-
-                        @NonNull
-                        @Override
-                        public ApplicationInfo getApplicationInfo() {
-                            return param.getApplicationInfo();
-                        }
-
-                        @Override
-                        public boolean isFirstPackage() {
-                            return param.isFirstPackage();
-                        }
-
-                        @NonNull
-                        @Override
-                        public ClassLoader getDefaultClassLoader() {
-                            return param.getDefaultClassLoader();
-                        }
-
-                        @NonNull
-                        @Override
-                        public ClassLoader getClassLoader() {
-                            return param.getClassLoader();
-                        }
-                    });
-                } catch (Throwable t) {
-                    Log.e(TAG, "Error when calling onPackageLoaded of " + module.getModuleApplicationInfo().packageName, t);
-                }
-            }
-        } else {
+        if (!isOutdatedModern(targetApiVersion)) {
             for (XposedModule module : modules) {
                 try {
                     module.onPackageReady(param);
                 } catch (Throwable t) {
                     Log.e(TAG, "Error when calling onPackageReady of " + module.getModuleApplicationInfo().packageName, t);
                 }
+            }
+        }
+    }
+
+    public static void callOnSystemServerLoaded(XposedModuleInterface.SystemServerLoadedParam param) {
+        for (XposedModule module : modules) {
+            try {
+                module.onSystemServerLoaded(param);
+            } catch (Throwable t) {
+                Log.e(TAG, "Error when calling onSystemServerStarting of " + module.getModuleApplicationInfo().packageName, t);
             }
         }
     }
@@ -190,12 +162,14 @@ public class LSPosedContext implements XposedInterface {
             } catch (Throwable e) {
                 Log.e(TAG, "Error on load base of " + module.apkPath, e);
             }
+            LSPosedContext ctx;
+            ExceptionMode defaultExceptionMode;
             if (isOutdatedModern(targetApiVersion)) {
-                var ctx = new LSPosedContext(module.packageName, module.applicationInfo, module.service);
+                ctx = new LSPosedContext(module.packageName, module.applicationInfo, module.service);
             } else {
                 module.file.moduleLibraryNames.forEach(NativeAPI::recordNativeEntrypoint);
-                var defaultExceptionMode = module.file.exceptionPassthrough ? ExceptionMode.PASSTHROUGH : ExceptionMode.PROTECTIVE;
-                var ctx = new LSPosedContext(module.packageName, module.applicationInfo, module.service, defaultExceptionMode, targetApiVersion);
+                defaultExceptionMode = module.file.exceptionPassthrough ? ExceptionMode.PASSTHROUGH : ExceptionMode.PROTECTIVE;
+                ctx = new LSPosedContext(module.packageName, module.applicationInfo, module.service, defaultExceptionMode, targetApiVersion);
             }
             for (var entry : module.file.moduleClassNames) {
                 var moduleClass = mcl.loadClass(entry);
@@ -204,10 +178,11 @@ public class LSPosedContext implements XposedInterface {
                     Log.e(TAG, "    This class doesn't implement any sub-interface of XposedModule, skipping it");
                     continue;
                 }
+                XposedModule moduleContext;
                 try {
                     if (isOutdatedModern(targetApiVersion)) {
                         var moduleEntry = moduleClass.getConstructor(XposedInterface.class, XposedModuleInterface.ModuleLoadedParam.class);
-                        var moduleContext = (XposedModule) moduleEntry.newInstance(ctx, new XposedModuleInterface.ModuleLoadedParam() {
+                        moduleContext = (XposedModule) moduleEntry.newInstance(ctx, new XposedModuleInterface.ModuleLoadedParam() {
                             @Override
                             public boolean isSystemServer() {
                                 return isSystemServer;
@@ -220,7 +195,7 @@ public class LSPosedContext implements XposedInterface {
                             }
                         });
                     } else {
-                        var moduleContext = (XposedModule) moduleClass.getConstructor().newInstance();
+                        moduleContext = (XposedModule) moduleClass.getConstructor().newInstance();
                         moduleContext.attachFramework(ctx);
                         moduleContext.onModuleLoaded(new XposedModuleInterface.ModuleLoadedParam() {
                             @Override
@@ -271,8 +246,9 @@ public class LSPosedContext implements XposedInterface {
     @Override
     public int getFrameworkPrivilege() {
         try {
-            return service.getFrameworkPrivilege();
-        } catch (RemoteException e) {
+            // TODO: LIBXPOSED SERVICE
+            return FRAMEWORK_PRIVILEGE_ROOT;
+        } catch (Throwable e) {
             throw new XposedFrameworkError(e);
         }
     }
