@@ -69,6 +69,7 @@ using SharedHashMap = phmap::parallel_flat_hash_map<K, V, Hash, Eq, Alloc, N, st
 SharedHashMap<jmethodID, std::unique_ptr<HookItem>> hooked_methods;
 
 jmethodID callback_ctor = nullptr;
+jclass callback_class = nullptr;
 jfieldID before_method_field = nullptr;
 jfieldID after_method_field = nullptr;
 
@@ -666,7 +667,9 @@ LSP_DEF_NATIVE_METHOD(jboolean, HookBridge, hookMethod, jobject hookMethod, jcla
     JNIMonitor monitor(env, backup);
     if (useModernApi100) {
         if (before_method_field == nullptr) {
-            auto callback_class = JNI_GetObjectClass(env, callback);
+            jclass local_cls = env->GetObjectClass(callback);
+            callback_class = (jclass)env->NewGlobalRef(local_cls);
+            env->DeleteLocalRef(local_cls);
             callback_ctor = JNI_GetMethodID(env, callback_class, "<init>", "(Ljava/lang/reflect/Method;Ljava/lang/reflect/Method;)V");
             before_method_field = JNI_GetFieldID(env, callback_class, "beforeInvocation", "Ljava/lang/reflect/Method;");
             after_method_field = JNI_GetFieldID(env, callback_class, "afterInvocation", "Ljava/lang/reflect/Method;");
