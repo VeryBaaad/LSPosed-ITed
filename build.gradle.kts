@@ -33,8 +33,7 @@ cmaker {
     default {
         arguments.addAll(
             arrayOf(
-                "-DEXTERNAL_ROOT=${File(rootDir.absolutePath, "external")}",
-                "-DANDROID_STL=none"
+                "-DEXTERNAL_ROOT=${File(rootDir.absolutePath, "external")}"
             )
         )
         val flags = arrayOf(

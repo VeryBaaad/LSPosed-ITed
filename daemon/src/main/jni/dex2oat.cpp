@@ -17,9 +17,11 @@
  * Copyright (C) 2023 LSPosed Contributors
  */
 
+#include <cstdlib>
 #include <fcntl.h>
 #include <jni.h>
 #include <string>
+#include <stdlib.h>
 #include <sys/mount.h>
 #include <sys/wait.h>
 #include <unistd.h>
