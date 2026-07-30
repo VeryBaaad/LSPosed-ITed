@@ -64,10 +64,11 @@ val injectedPackageUid by extra(2000)
 val defaultManagerPackageName by extra("org.lsposed.manager")
 val verCode by extra(commitCount)
 val verName by extra(latestTag)
-val androidTargetSdkVersion by extra(36)
+val androidTargetSdkVersion by extra(37)
 val androidMinSdkVersion by extra(27)
-val androidBuildToolsVersion by extra("36.0.0")
-val androidCompileSdkVersion by extra(36)
+val androidBuildToolsVersion by extra("37.0.0")
+val androidCompileSdkVersion by extra(37)
+val androidCompileSdkMinorVersion by extra(1)
 val androidCompileNdkVersion by extra(libs.versions.ndk.get())
 val androidSourceCompatibility by extra(JavaVersion.VERSION_21)
 val androidTargetCompatibility by extra(JavaVersion.VERSION_21)
@@ -80,7 +81,11 @@ tasks.register("Delete", Delete::class) {
 subprojects {
     plugins.withType(AndroidBasePlugin::class.java) {
         extensions.configure(CommonExtension::class.java) {
-            compileSdk = androidCompileSdkVersion
+            compileSdk {
+                version = release(androidCompileSdkVersion) {
+                    minorApiLevel = androidCompileSdkMinorVersion
+                }
+            }
             ndkVersion = androidCompileNdkVersion
             buildToolsVersion = androidBuildToolsVersion
 
@@ -90,6 +95,7 @@ subprojects {
             val applicationDefaultConfig = defaultConfig as? ApplicationDefaultConfig
             if (applicationDefaultConfig != null) {
                 applicationDefaultConfig.targetSdk = androidTargetSdkVersion
+                applicationDefaultConfig.minSdk = androidMinSdkVersion
                 applicationDefaultConfig.versionCode = verCode
                 applicationDefaultConfig.versionName = verName
             }
