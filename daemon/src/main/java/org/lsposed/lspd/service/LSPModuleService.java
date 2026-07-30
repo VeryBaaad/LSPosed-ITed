@@ -61,7 +61,7 @@ public class LSPModuleService extends IXposedService.Stub {
     private final static Map<Module, LSPModuleService> serviceMap = Collections.synchronizedMap(new WeakHashMap<>());
     private final static ExecutorService binderExecutor = Executors.newSingleThreadExecutor(r -> new Thread(r, "module-binder-delivery"));
 
-    static final int XPOSED_API_VERSION = XposedInterface.LIB_API;
+    static final int XPOSED_API_VERSION = XposedInterface.API_101;
 
     public final static String FILES_DIR = "files";
 

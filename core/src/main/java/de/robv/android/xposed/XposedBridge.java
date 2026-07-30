@@ -135,7 +135,7 @@ public final class XposedBridge {
      * Returns the currently installed version of the Xposed framework.
      */
     public static int getXposedVersion() {
-        return XposedInterface.LIB_API;
+        return XposedInterface.API_101;
     }
 
     /**
