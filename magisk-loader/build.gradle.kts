@@ -32,7 +32,7 @@ plugins {
 
 val moduleName = "LSPosed"
 val moduleBaseId = "lsposed"
-val authors = "LSPosed Developers & Ireina"
+val authors = "LSPosed Developers & Ireina & VeryBaaad"
 
 val injectedPackageName: String by rootProject.extra
 val injectedPackageUid: Int by rootProject.extra
@@ -128,7 +128,7 @@ androidComponents.onVariants(androidComponents.selector().all()) { variant ->
     val magiskDir = layout.buildDirectory.dir("magisk/$variantLowered")
 
     val moduleId = "${flavorLowered}_$moduleBaseId"
-    val zipFileName = "$moduleName-v$verName-$verCode-Irena-$buildTypeLowered.zip"
+    val zipFileName = "$moduleName-v$verName-$verCode-$buildTypeLowered.zip"
 
     val prepareMagiskFilesTask = tasks.register<Sync>(
         "prepareMagiskFiles$variantCapped"
@@ -153,7 +153,7 @@ androidComponents.onVariants(androidComponents.selector().all()) { variant ->
                 "versionCode" to verCode,
                 "authorList" to authors,
                 "updateJson" to "https://lsposed.github.io/LSPosed/release/${flavorLowered}.json",
-                "requirement" to "Requires Magisk 26.0+ and Zygisk enabled",
+                "requirement" to "Requires Zygisk enabled.",
             )
             filter<FixCrLfFilter>("eol" to FixCrLfFilter.CrLf.newInstance("lf"))
         }
