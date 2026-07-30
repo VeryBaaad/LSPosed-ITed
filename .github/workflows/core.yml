@@ -3,7 +3,7 @@ name: Core
 on:
   workflow_dispatch:
   push:
-    branches: [ dev ]
+    branches: [ main ]
     tags: [ v* ]
   pull_request:
   merge_group:
