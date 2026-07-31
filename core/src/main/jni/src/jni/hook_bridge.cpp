@@ -69,7 +69,6 @@ using SharedHashMap = phmap::parallel_flat_hash_map<K, V, Hash, Eq, Alloc, N, st
 SharedHashMap<jmethodID, std::unique_ptr<HookItem>> hooked_methods;
 
 jmethodID callback_ctor = nullptr;
-jclass callback_class = nullptr;
 jfieldID before_method_field = nullptr;
 jfieldID after_method_field = nullptr;
 
@@ -667,9 +666,7 @@ LSP_DEF_NATIVE_METHOD(jboolean, HookBridge, hookMethod, jobject hookMethod, jcla
     JNIMonitor monitor(env, backup);
     if (useModernApi100) {
         if (before_method_field == nullptr) {
-            jclass local_cls = env->GetObjectClass(callback);
-            callback_class = (jclass)env->NewGlobalRef(local_cls);
-            env->DeleteLocalRef(local_cls);
+            auto callback_class = JNI_GetObjectClass(env, callback);
             callback_ctor = JNI_GetMethodID(env, callback_class, "<init>", "(Ljava/lang/reflect/Method;Ljava/lang/reflect/Method;)V");
             before_method_field = JNI_GetFieldID(env, callback_class, "beforeInvocation", "Ljava/lang/reflect/Method;");
             after_method_field = JNI_GetFieldID(env, callback_class, "afterInvocation", "Ljava/lang/reflect/Method;");
@@ -782,7 +779,7 @@ LSP_DEF_NATIVE_METHOD(jboolean, HookBridge, setTrusted, jobject cookie) {
     return lsplant::MakeDexFileTrusted(env, cookie);
 }
 
-LSP_DEF_NATIVE_METHOD(jobjectArray, HookBridge, callbackSnapshot, jobject method, jint maxPriority, jboolean useModernApi100) {
+LSP_DEF_NATIVE_METHOD(jobjectArray, HookBridge, callbackSnapshot, jobject method, jint maxPriority) {
     auto target = env->FromReflectedMethod(method);
     auto object_class = env->FindClass("java/lang/Object");
     HookItem *hook_item = nullptr;
@@ -807,7 +804,7 @@ LSP_DEF_NATIVE_METHOD(jobjectArray, HookBridge, callbackSnapshot, jobject method
     return res;
 }
 
-LSP_DEF_NATIVE_METHOD(jobjectArray, HookBridge, oldCallbackSnapshot, jobject method, jint maxPriority, jboolean useModernApi100) {
+LSP_DEF_NATIVE_METHOD(jobjectArray, HookBridge, oldCallbackSnapshot, jclass callback_class, jobject method) {
     auto target = env->FromReflectedMethod(method);
     HookItem *hook_item = nullptr;
     hooked_methods.if_contains(target, [&hook_item](const auto &it) {
@@ -836,8 +833,8 @@ LSP_DEF_NATIVE_METHOD(jobjectArray, HookBridge, oldCallbackSnapshot, jobject met
 }
 
 static JNINativeMethod gMethods[] = {
-    LSP_NATIVE_METHOD(HookBridge, hookMethod, "(ZLjava/lang/reflect/Executable;Ljava/lang/Class;ILjava/lang/Object;)Z"),
-    LSP_NATIVE_METHOD(HookBridge, unhookMethod, "(ZLjava/lang/reflect/Executable;Ljava/lang/Object;)Z"),
+    LSP_NATIVE_METHOD(HookBridge, hookMethod, "(Ljava/lang/reflect/Executable;Ljava/lang/Class;ILjava/lang/Object;Z)Z"),
+    LSP_NATIVE_METHOD(HookBridge, unhookMethod, "(Ljava/lang/reflect/Executable;Ljava/lang/Object;Z)Z"),
     LSP_NATIVE_METHOD(HookBridge, deoptimizeMethod, "(Ljava/lang/reflect/Executable;)Z"),
     LSP_NATIVE_METHOD(HookBridge, invokeOriginalMethod,
                       "(Ljava/lang/reflect/Executable;Ljava/lang/Object;[Ljava/lang/Object;Z)Ljava/lang/Object;"),
@@ -848,7 +845,7 @@ static JNINativeMethod gMethods[] = {
     LSP_NATIVE_METHOD(HookBridge, allocateObject, "(Ljava/lang/Class;)Ljava/lang/Object;"),
     LSP_NATIVE_METHOD(HookBridge, allocateSpecialReceiver,
                       "(Ljava/lang/reflect/Constructor;Ljava/lang/Class;)Ljava/lang/Object;"),
-    LSP_NATIVE_METHOD(HookBridge, findClassInitializer, "(Ljava/lang/Class;)Ljava/lang/reflect/Method;"),
+    LSP_NATIVE_METHOD(HookBridge, findClassInitializer, "(Ljava/lang/Class;Z)Ljava/lang/Object;"),
     LSP_NATIVE_METHOD(HookBridge, instanceOf, "(Ljava/lang/Object;Ljava/lang/Class;)Z"),
     LSP_NATIVE_METHOD(HookBridge, gettid, "()I"),
     LSP_NATIVE_METHOD(HookBridge, setTrusted, "(Ljava/lang/Object;)Z"),
