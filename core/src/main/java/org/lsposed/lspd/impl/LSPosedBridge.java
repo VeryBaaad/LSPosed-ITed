@@ -17,8 +17,10 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
-import cat.baaad.utils.TodoUtilsKt;
 import de.robv.android.xposed.XposedBridge;
 import io.github.libxposed.api.XposedInterface;
 import io.github.libxposed.api.annotations.AfterInvocation;
@@ -295,6 +297,34 @@ public class LSPosedBridge {
         }
     }
 
+    /**
+     * The object registered natively for a modern hook. The hooker is mutable so that
+     * {@link XposedInterface.HookHandle#replaceHook} and {@link XposedInterface.HookBuilder#setId}
+     * can swap it atomically without installing a second native record: the native layer indexes
+     * this record by identity, so there is never a window where two hookers look active.
+     */
+    static class HookRecord {
+        volatile XposedInterface.Hooker hooker;
+        @Nullable
+        final String id;
+        // Bumped on every replacement; a handle stays valid only while its captured value matches.
+        final AtomicInteger epoch = new AtomicInteger();
+        // Cleared on unhook, making unhook idempotent and invalidating outstanding handles.
+        final AtomicBoolean installed = new AtomicBoolean(true);
+
+        HookRecord(XposedInterface.Hooker hooker, @Nullable String id) {
+            this.hooker = hooker;
+            this.id = id;
+        }
+    }
+
+    /** Identifies a hook id within the module that owns it, per executable. */
+    private record IdKey(@Nullable Object moduleId, Executable executable, String id) {
+    }
+
+    // Keyed by (module, executable, id) so a repeated intercept() reuses the installed record.
+    private static final ConcurrentHashMap<IdKey, HookRecord> idRegistry = new ConcurrentHashMap<>();
+
     static class ChainImpl<T extends Executable> implements XposedInterface.Chain {
         private final int threadId = HookBridge.gettid();
         private final T executable;
@@ -310,10 +340,25 @@ public class LSPosedBridge {
                   Object thisObject, Object[] args, boolean special) {
             this.executable = executable;
             this.returnType = returnType;
-            this.hookers = hookers == null ? EMPTY_ARRAY : hookers;
+            // Freeze the hookers once here: the chain is snapshot based, so replacing a hooker
+            // mid-call must not affect this in-flight call.
+            this.hookers = hookers == null ? EMPTY_ARRAY : freezeHookers(hookers);
             this.thisObject = thisObject;
             this.args = args == null ? EMPTY_ARRAY : args;
             this.special = special;
+        }
+
+        /**
+         * Resolves each native callback to the hooker that is current right now. Records are
+         * unwrapped here so the rest of the chain never observes a later replacement.
+         */
+        private static Object[] freezeHookers(Object[] hookers) {
+            var frozen = new Object[hookers.length];
+            for (int i = 0; i < hookers.length; i++) {
+                var entry = hookers[i];
+                frozen[i] = entry instanceof HookRecord record ? record.hooker : entry;
+            }
+            return frozen;
         }
 
         void close() {
@@ -527,6 +572,8 @@ public class LSPosedBridge {
         private final XposedInterface.ExceptionMode defaultExceptionMode;
         private int priority = XposedInterface.PRIORITY_DEFAULT;
         private XposedInterface.ExceptionMode exceptionMode = XposedInterface.ExceptionMode.DEFAULT;
+        @Nullable
+        private String id = null;
 
         HookBuilderImpl(XposedInterface context, Executable executable,
                         XposedInterface.ExceptionMode defaultExceptionMode) {
@@ -555,23 +602,32 @@ public class LSPosedBridge {
                     && defaultExceptionMode == XposedInterface.ExceptionMode.PROTECTIVE) {
                 hooker = new ProtectiveHooker(context, hooker);
             }
-            return doHook(executable, priority, hooker);
+            return doHook(executable, priority, hooker, context, id);
         }
 
         @Override
         public XposedInterface.HookBuilder setId(@Nullable String id) {
-            TodoUtilsKt.notImplemented("API 102 is not supported");
-            return null;
+            this.id = id;
+            return this;
         }
     }
 
+    /**
+     * A handle is stale once its record is replaced (the epoch moves on) or unhooked, which is what
+     * makes a replaced handle invalid as the API requires.
+     */
     static class HookHandleImpl implements XposedInterface.HookHandle {
         private final Executable executable;
-        private final XposedInterface.Hooker hooker;
+        @Nullable
+        private final Object moduleId;
+        private final HookRecord record;
+        private final int epoch;
 
-        HookHandleImpl(Executable executable, XposedInterface.Hooker hooker) {
+        HookHandleImpl(Executable executable, @Nullable Object moduleId, HookRecord record, int epoch) {
             this.executable = executable;
-            this.hooker = hooker;
+            this.moduleId = moduleId;
+            this.record = record;
+            this.epoch = epoch;
         }
 
         @NonNull
@@ -582,21 +638,32 @@ public class LSPosedBridge {
 
         @Override
         public void unhook() {
-            HookBridge.unhookMethod(executable, hooker, false);
+            if (record.installed.compareAndSet(true, false)) {
+                HookBridge.unhookMethod(executable, record, false);
+                if (record.id != null) {
+                    idRegistry.remove(new IdKey(moduleId, executable, record.id), record);
+                }
+            }
         }
 
         @Nullable
         @Override
         public String getId() {
-            TodoUtilsKt.notImplemented("API 102 is not supported");
-            return null;
+            return record.id;
         }
 
         @NonNull
         @Override
         public XposedInterface.HookHandle replaceHook(@NonNull XposedInterface.Hooker hooker) {
-            TodoUtilsKt.notImplemented("API 102 is not supported");
-            return null;
+            if (hooker == null) {
+                throw new IllegalArgumentException("hooker should not be null!");
+            }
+            // The epoch CAS also makes concurrent replacements mutually exclusive.
+            if (!record.installed.get() || !record.epoch.compareAndSet(epoch, epoch + 1)) {
+                throw new IllegalStateException("Hook handle is no longer valid");
+            }
+            record.hooker = hooker;
+            return new HookHandleImpl(executable, moduleId, record, epoch + 1);
         }
     }
 
@@ -714,6 +781,21 @@ public class LSPosedBridge {
             int priority,
             XposedInterface.Hooker hooker
     ) {
+        return doHook(hookMethod, priority, hooker, null, null);
+    }
+
+    /**
+     * Installs a modern hook. When {@code id} is non-null the hook is exclusive within
+     * {@code moduleId} on this executable: registering the same id again replaces the existing
+     * hooker in place instead of adding a second native record.
+     */
+    public static XposedInterface.HookHandle doHook(
+            Executable hookMethod,
+            int priority,
+            XposedInterface.Hooker hooker,
+            @Nullable Object moduleId,
+            @Nullable String id
+    ) {
         if (Modifier.isAbstract(hookMethod.getModifiers())) {
             throw new IllegalArgumentException("Cannot hook abstract methods: " + hookMethod);
         } else if (hookMethod.getDeclaringClass().getClassLoader() == LSPosedContext.class.getClassLoader()) {
@@ -724,9 +806,34 @@ public class LSPosedBridge {
             throw new IllegalArgumentException("hooker should not be null!");
         }
 
-        if (HookBridge.hookMethod(hookMethod, LSPosedBridge.NativeHooker.class, priority, hooker, false)) {
-            return new HookHandleImpl(hookMethod, hooker);
+        if (id == null) {
+            var record = new HookRecord(hooker, null);
+            if (HookBridge.hookMethod(hookMethod, LSPosedBridge.NativeHooker.class, priority, record, false)) {
+                return new HookHandleImpl(hookMethod, moduleId, record, record.epoch.get());
+            }
+            throw new io.github.libxposed.api.error.HookFailedError("Cannot hook " + hookMethod);
         }
+
+        var key = new IdKey(moduleId, hookMethod, id);
+        var candidate = new HookRecord(hooker, id);
+        while (true) {
+            // putIfAbsent is the only atomic point: a check-then-act would let two threads install
+            // two records for one id, which is the duplication this design exists to avoid.
+            var existing = idRegistry.putIfAbsent(key, candidate);
+            if (existing == null) break;
+            if (existing.installed.get()) {
+                var epoch = existing.epoch.incrementAndGet();
+                existing.hooker = hooker;
+                return new HookHandleImpl(hookMethod, moduleId, existing, epoch);
+            }
+            // The id is held by a record that has since been unhooked; drop it and retry.
+            idRegistry.remove(key, existing);
+        }
+
+        if (HookBridge.hookMethod(hookMethod, LSPosedBridge.NativeHooker.class, priority, candidate, false)) {
+            return new HookHandleImpl(hookMethod, moduleId, candidate, candidate.epoch.get());
+        }
+        idRegistry.remove(key, candidate);
         throw new io.github.libxposed.api.error.HookFailedError("Cannot hook " + hookMethod);
     }
 

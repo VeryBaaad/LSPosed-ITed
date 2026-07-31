@@ -48,6 +48,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import io.github.libxposed.api.XposedInterface;
+import io.github.libxposed.service.HookedProcess;
+import io.github.libxposed.service.IHotReloadCallback;
 import io.github.libxposed.service.IXposedScopeCallback;
 import io.github.libxposed.service.IXposedService;
 
@@ -61,7 +63,7 @@ public class LSPModuleService extends IXposedService.Stub {
     private final static Map<Module, LSPModuleService> serviceMap = Collections.synchronizedMap(new WeakHashMap<>());
     private final static ExecutorService binderExecutor = Executors.newSingleThreadExecutor(r -> new Thread(r, "module-binder-delivery"));
 
-    static final int XPOSED_API_VERSION = XposedInterface.API_101;
+    static final int XPOSED_API_VERSION = XposedInterface.LIB_API;
 
     public final static String FILES_DIR = "files";
 
@@ -374,5 +376,21 @@ public class LSPModuleService extends IXposedService.Stub {
         } catch (IOException e) {
             throw new RemoteException(e.getMessage());
         }
+    }
+
+    @Override
+    public List<HookedProcess> getRunningTargets() throws RemoteException {
+        ensureModule();
+        // Hot reload is not implemented, so no target is ever reloadable and the list stays empty.
+        return Collections.emptyList();
+    }
+
+    @Override
+    public void hotReloadModule(long targetId, Bundle data, IHotReloadCallback callback) throws RemoteException {
+        ensureModule();
+        if (callback == null) return;
+        // getRunningTargets() never hands out an id, so any id here is unknown to us. Report
+        // UNSUPPORTED rather than throwing SecurityException: the module is not at fault.
+        callback.onHotReloadResult(IXposedService.HOT_RELOAD_UNSUPPORTED, "Hot reload is not supported");
     }
 }

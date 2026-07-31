@@ -782,7 +782,7 @@ LSP_DEF_NATIVE_METHOD(jboolean, HookBridge, setTrusted, jobject cookie) {
     return lsplant::MakeDexFileTrusted(env, cookie);
 }
 
-LSP_DEF_NATIVE_METHOD(jobjectArray, HookBridge, callbackSnapshot, jobject method, jint maxPriority, jboolean useModernApi100) {
+LSP_DEF_NATIVE_METHOD(jobjectArray, HookBridge, callbackSnapshot, jobject method, jint maxPriority) {
     auto target = env->FromReflectedMethod(method);
     auto object_class = env->FindClass("java/lang/Object");
     HookItem *hook_item = nullptr;
@@ -807,7 +807,7 @@ LSP_DEF_NATIVE_METHOD(jobjectArray, HookBridge, callbackSnapshot, jobject method
     return res;
 }
 
-LSP_DEF_NATIVE_METHOD(jobjectArray, HookBridge, oldCallbackSnapshot, jobject method, jint maxPriority, jboolean useModernApi100) {
+LSP_DEF_NATIVE_METHOD(jobjectArray, HookBridge, oldCallbackSnapshot, jclass callback_class, jobject method) {
     auto target = env->FromReflectedMethod(method);
     HookItem *hook_item = nullptr;
     hooked_methods.if_contains(target, [&hook_item](const auto &it) {
@@ -836,8 +836,8 @@ LSP_DEF_NATIVE_METHOD(jobjectArray, HookBridge, oldCallbackSnapshot, jobject met
 }
 
 static JNINativeMethod gMethods[] = {
-    LSP_NATIVE_METHOD(HookBridge, hookMethod, "(ZLjava/lang/reflect/Executable;Ljava/lang/Class;ILjava/lang/Object;)Z"),
-    LSP_NATIVE_METHOD(HookBridge, unhookMethod, "(ZLjava/lang/reflect/Executable;Ljava/lang/Object;)Z"),
+    LSP_NATIVE_METHOD(HookBridge, hookMethod, "(Ljava/lang/reflect/Executable;Ljava/lang/Class;ILjava/lang/Object;Z)Z"),
+    LSP_NATIVE_METHOD(HookBridge, unhookMethod, "(Ljava/lang/reflect/Executable;Ljava/lang/Object;Z)Z"),
     LSP_NATIVE_METHOD(HookBridge, deoptimizeMethod, "(Ljava/lang/reflect/Executable;)Z"),
     LSP_NATIVE_METHOD(HookBridge, invokeOriginalMethod,
                       "(Ljava/lang/reflect/Executable;Ljava/lang/Object;[Ljava/lang/Object;Z)Ljava/lang/Object;"),
@@ -848,7 +848,7 @@ static JNINativeMethod gMethods[] = {
     LSP_NATIVE_METHOD(HookBridge, allocateObject, "(Ljava/lang/Class;)Ljava/lang/Object;"),
     LSP_NATIVE_METHOD(HookBridge, allocateSpecialReceiver,
                       "(Ljava/lang/reflect/Constructor;Ljava/lang/Class;)Ljava/lang/Object;"),
-    LSP_NATIVE_METHOD(HookBridge, findClassInitializer, "(Ljava/lang/Class;)Ljava/lang/reflect/Method;"),
+    LSP_NATIVE_METHOD(HookBridge, findClassInitializer, "(Ljava/lang/Class;Z)Ljava/lang/Object;"),
     LSP_NATIVE_METHOD(HookBridge, instanceOf, "(Ljava/lang/Object;Ljava/lang/Class;)Z"),
     LSP_NATIVE_METHOD(HookBridge, gettid, "()I"),
     LSP_NATIVE_METHOD(HookBridge, setTrusted, "(Ljava/lang/Object;)Z"),
