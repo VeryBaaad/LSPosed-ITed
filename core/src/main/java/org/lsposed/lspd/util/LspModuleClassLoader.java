@@ -33,8 +33,10 @@ public final class LspModuleClassLoader extends ByteBufferDexClassLoader {
     private static final String zipSeparator = "!/";
     private static final List<File> systemNativeLibraryDirs =
             splitPaths(System.getProperty("java.library.path"));
+    private static final String LEGACY_API_PREFIX = "de.robv.android.xposed.";
     private final String apk;
     private final List<File> nativeLibraryDirs = new ArrayList<>();
+    private boolean blockLegacyApi = false;
 
     private static List<File> splitPaths(String searchPath) {
         var result = new ArrayList<File>();
@@ -69,6 +71,14 @@ public final class LspModuleClassLoader extends ByteBufferDexClassLoader {
 
     @Override
     protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+        // API 102 forbids libxposed modules from calling the legacy de.robv APIs. This loader's
+        // parent is the framework's own loader, which carries the legacy bridge, so refusing to
+        // resolve the package here is what actually enforces it - reflective lookups against this
+        // loader included.
+        if (blockLegacyApi && name.startsWith(LEGACY_API_PREFIX)) {
+            throw new ClassNotFoundException(
+                    name + " is unavailable to modules targeting Xposed API 102 or higher");
+        }
         var cl = findLoadedClass(name);
         if (cl != null) {
             return cl;
@@ -184,6 +194,14 @@ public final class LspModuleClassLoader extends ByteBufferDexClassLoader {
                                       List<SharedMemory> dexes,
                                       String librarySearchPath,
                                       ClassLoader parent) {
+        return loadApk(apk, dexes, librarySearchPath, parent, false);
+    }
+
+    public static ClassLoader loadApk(String apk,
+                                      List<SharedMemory> dexes,
+                                      String librarySearchPath,
+                                      ClassLoader parent,
+                                      boolean blockLegacyApi) {
         var dexBuffers = dexes.stream().parallel().map(dex -> {
             try {
                 return dex.mapReadOnly();
@@ -199,6 +217,9 @@ public final class LspModuleClassLoader extends ByteBufferDexClassLoader {
             cl = new LspModuleClassLoader(dexBuffers, parent, apk);
             cl.initNativeLibraryDirs(librarySearchPath);
         }
+        // Set after construction: the super constructor may resolve classes itself, and the
+        // legacy API must stay reachable until the module's own code starts running.
+        cl.blockLegacyApi = blockLegacyApi;
         Arrays.stream(dexBuffers).parallel().forEach(SharedMemory::unmap);
         dexes.stream().parallel().forEach(SharedMemory::close);
         return cl;
