@@ -134,7 +134,8 @@ public final class ModuleUtil {
                 zip = new ZipFile(apk);
                 int apiVersion = ConfigManager.getXposedApiVersion();
                 if (zip.getEntry("META-INF/xposed/java_init.list") != null
-                        && apiVersion > 0) {
+                        && apiVersion > 0
+                        && getTargetApiVersion(zip) >= apiVersion) {
                     return zip;
                 }
                 zip.close();
@@ -185,7 +186,7 @@ public final class ModuleUtil {
             var modernApk = getModernModuleApk(app);
             var legacy = isLegacyModule(app);
             var outdatedModernApk = modernApk == null && !legacy ? getOutdatedModernModuleApk(app) : null;
-            if (modernApk != null || legacy) {
+            if (modernApk != null || legacy || outdatedModernApk != null) {
                 modules.computeIfAbsent(Pair.create(pkg.packageName, app.uid / App.PER_USER_RANGE),
                         k -> new InstalledModule(pkg, modernApk != null ? modernApk : outdatedModernApk));
             }
@@ -230,7 +231,7 @@ public final class ModuleUtil {
         var modernApk = getModernModuleApk(app);
         var legacy = isLegacyModule(app);
         var outdatedModernApk = modernApk == null && !legacy ? getOutdatedModernModuleApk(app) : null;
-        if (modernApk != null || legacy) {
+        if (modernApk != null || legacy || outdatedModernApk != null) {
             InstalledModule module = new InstalledModule(pkg, modernApk != null ? modernApk : outdatedModernApk);
             installedModules.put(Pair.create(packageName, userId), module);
             listeners.forEach(i -> i.onSingleModuleReloaded(module));
