@@ -37,7 +37,7 @@ cmaker {
             )
         )
         val flags = arrayOf(
-            "-DINJECTED_AID=$injectedPackageUid",
+            "-DINJECTED_AID=${extra["injectedPackageUid"]}",
             "-Wno-gnu-string-literal-operator-template",
             "-Wno-c++2b-extensions",
         )
@@ -58,23 +58,24 @@ val repo = jgit.repo()
 val commitCount = (repo?.commitCount("HEAD") ?: 1) + 4200
 val latestTag = repo?.latestTag?.removePrefix("v")?.substringBefore("-") ?: "2.0.0-ited"
 
-val injectedPackageName by extra("com.android.shell")
-val injectedPackageUid by extra(2000)
+extra["injectedPackageName"] = "com.android.shell"
+extra["injectedPackageUid"] = 2000
 
-val defaultManagerPackageName by extra("org.lsposed.manager")
-val verCode by extra(commitCount)
-val verName by extra(latestTag)
-val androidTargetSdkVersion by extra(37)
-val androidMinSdkVersion by extra(27)
-val androidBuildToolsVersion by extra("37.0.0")
-val androidCompileSdkVersion by extra(37)
-val androidCompileSdkMinorVersion by extra(1)
-val androidCompileNdkVersion by extra(libs.versions.ndk.get())
-val androidSourceCompatibility by extra(JavaVersion.VERSION_21)
-val androidTargetCompatibility by extra(JavaVersion.VERSION_21)
-val androidCmakeVersion by extra("3.28.0+")
+extra["defaultManagerPackageName"] = "org.lsposed.manager"
+extra["verCode"] = commitCount
+extra["verName"] = latestTag
+extra["androidTargetSdkVersion"] = 37
+extra["androidMinSdkVersion"] = 27
+extra["androidBuildToolsVersion"] = "37.0.0"
+extra["androidCompileSdkVersion"] = 37
+extra["androidCompileSdkMinorVersion"] = 1
+extra["androidCompileNdkVersion"] = libs.versions.ndk.get()
+extra["androidSourceCompatibility"] = JavaVersion.VERSION_21
+extra["androidTargetCompatibility"] = JavaVersion.VERSION_21
+extra["androidCmakeVersion"] = "3.28.0+"
 
 tasks.register("Delete", Delete::class) {
+    description = "Delete build directory"
     delete(rootProject.layout.buildDirectory)
 }
 
@@ -82,35 +83,35 @@ subprojects {
     plugins.withType(AndroidBasePlugin::class.java) {
         extensions.configure(CommonExtension::class.java) {
             compileSdk {
-                version = release(androidCompileSdkVersion) {
-                    minorApiLevel = androidCompileSdkMinorVersion
+                version = release(rootProject.extra["androidCompileSdkVersion"] as Int) {
+                    minorApiLevel = rootProject.extra["androidCompileSdkMinorVersion"] as Int
                 }
             }
-            ndkVersion = androidCompileNdkVersion
-            buildToolsVersion = androidBuildToolsVersion
+            ndkVersion = rootProject.extra["androidCompileNdkVersion"] as String
+            buildToolsVersion = rootProject.extra["androidBuildToolsVersion"] as String
 
-            externalNativeBuild.cmake.version = androidCmakeVersion
+            externalNativeBuild.cmake.version = rootProject.extra["androidCmakeVersion"] as String
 
-            defaultConfig.minSdk = androidMinSdkVersion
+            defaultConfig.minSdk = rootProject.extra["androidMinSdkVersion"] as Int
             val applicationDefaultConfig = defaultConfig as? ApplicationDefaultConfig
             if (applicationDefaultConfig != null) {
-                applicationDefaultConfig.targetSdk = androidTargetSdkVersion
-                applicationDefaultConfig.minSdk = androidMinSdkVersion
-                applicationDefaultConfig.versionCode = verCode
-                applicationDefaultConfig.versionName = verName
+                applicationDefaultConfig.targetSdk = rootProject.extra["androidTargetSdkVersion"] as Int
+                applicationDefaultConfig.minSdk = rootProject.extra["androidMinSdkVersion"] as Int
+                applicationDefaultConfig.versionCode = rootProject.extra["verCode"] as Int
+                applicationDefaultConfig.versionName = rootProject.extra["verName"] as String
             }
 
             lint.abortOnError = true
             lint.checkReleaseBuilds = false
 
-            compileOptions.sourceCompatibility = androidSourceCompatibility
-            compileOptions.targetCompatibility = androidTargetCompatibility
+            compileOptions.sourceCompatibility = rootProject.extra["androidSourceCompatibility"] as JavaVersion
+            compileOptions.targetCompatibility = rootProject.extra["androidTargetCompatibility"] as JavaVersion
         }
     }
     plugins.withType(JavaPlugin::class.java) {
         extensions.configure(JavaPluginExtension::class.java) {
-            sourceCompatibility = androidSourceCompatibility
-            targetCompatibility = androidTargetCompatibility
+            sourceCompatibility = rootProject.extra["androidSourceCompatibility"] as JavaVersion
+            targetCompatibility = rootProject.extra["androidTargetCompatibility"] as JavaVersion
         }
     }
 }

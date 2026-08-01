@@ -30,12 +30,10 @@ plugins {
 
 val daemonName = "LSPosed"
 
-val injectedPackageName: String by rootProject.extra
-val injectedPackageUid: Int by rootProject.extra
+val injectedPackageName = rootProject.extra["injectedPackageName"] as String
+val injectedPackageUid = rootProject.extra["injectedPackageUid"] as Int
 
-val agpVersion: String by project
-
-val defaultManagerPackageName: String by rootProject.extra
+val defaultManagerPackageName = rootProject.extra["defaultManagerPackageName"] as String
 
 android {
     buildFeatures {
@@ -90,6 +88,7 @@ androidComponents.onVariants(androidComponents.selector().all()) { variant ->
     val buildTypeLowered = buildType.lowercase()
 
     val signInfoTask = tasks.register<GenerateSignInfoTask>("generate${variantCapped}SignInfo") {
+        description = "Generate a sign info"
         outputDir.set(layout.buildDirectory.dir("generated/source/signInfo/${variant.name.lowercase()}"))
         dependsOn(":app:validateSigning${buildTypeCapped}")
         val sign = rootProject.project(":app").extensions
