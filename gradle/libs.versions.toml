@@ -8,6 +8,13 @@ startupRuntime = "1.2.0"
 ndk = "29.0.13599879-beta2"
 libxposed-annotation = "1.0.0"
 libxposed-lint = "1.0.0"
+lifecycleRuntimeKtx = "2.11.0"
+activityCompose = "1.13.0"
+composeBom = "2026.06.01"
+material-icons = "1.7.8"
+navigationCompose = "2.9.8"
+runtime = "1.11.4"
+material3 = "1.4.0"
 
 [plugins]
 agp-lib = { id = "com.android.library", version.ref = "agp" }
@@ -64,3 +71,18 @@ kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-c
 
 libxposed-annotation = { group = "io.github.libxposed", name = "annotation", version.ref = "libxposed-annotation" }
 libxposed-lint = { group = "io.github.libxposed", name = "lint", version.ref = "libxposed-lint" }
+
+androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
+androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
+androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
+androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
+androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
+androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
+androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
+androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+androidx-compose-material-icons-core = { group = "androidx.compose.material", name = "material-icons-core", version.ref = "material-icons" }
+androidx-compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended", version.ref = "material-icons" }
+androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
+androidx-compose-runtime = { group = "androidx.compose.runtime", name = "runtime", version.ref = "runtime" }
+androidx-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3" }
