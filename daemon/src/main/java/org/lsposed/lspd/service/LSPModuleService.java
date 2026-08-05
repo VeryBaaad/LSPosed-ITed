@@ -55,19 +55,23 @@ public class LSPModuleService extends IXposedService.Stub {
 
     private final static String TAG = "LSPosedModuleService";
 
+    private final ExecutorService hotReloadExecutor = Executors.newCachedThreadPool(r -> new Thread(r, "LSPHotReload"));
     private final static Set<Integer> uidSet = ConcurrentHashMap.newKeySet();
     private final static Set<ModuleBinderKey> sentBinderSet = ConcurrentHashMap.newKeySet();
     private final static Set<ModuleBinderKey> sendingBinderSet = ConcurrentHashMap.newKeySet();
     private final static Map<Module, LSPModuleService> serviceMap = Collections.synchronizedMap(new WeakHashMap<>());
     private final static ExecutorService binderExecutor = Executors.newSingleThreadExecutor(r -> new Thread(r, "module-binder-delivery"));
 
-    static final int XPOSED_API_VERSION = XposedInterface.API_101;
+    static final int XPOSED_API_VERSION = XposedInterface.LIB_API;
 
     public final static String FILES_DIR = "files";
 
     private final @NonNull
     Module loadedModule;
 
+    public LSPModuleService(@NonNull Module loadedModule) {
+        this.loadedModule = loadedModule;
+    }
     static void uidClear() {
         uidSet.clear();
         sentBinderSet.clear();
@@ -86,6 +90,11 @@ public class LSPModuleService extends IXposedService.Stub {
         sendingBinderSet.removeIf(k -> k.uid == uid);
     }
 
+    static void autoHotReload(Module module) {
+        if (!module?.file?.autoHotReload == false) return;
+        serviceMap.computeIfAbsent(module, m -> new LSPModuleService(module));
+        LSPApplicationService
+    }
     static void sendBindersForRunningModules() {
         for (int uid : uidSet) {
             sendBinderForUid(uid);
