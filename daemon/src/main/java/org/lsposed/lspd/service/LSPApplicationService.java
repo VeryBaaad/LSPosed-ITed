@@ -20,6 +20,7 @@
 package org.lsposed.lspd.service;
 
 import static org.lsposed.lspd.service.ServiceManager.TAG;
+import io.github.libxposed.service.HookedProcess;
 
 import android.os.IBinder;
 import android.os.Parcel;
@@ -37,7 +38,10 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+
+import kotlin.jvm.Volatile;
 
 public class LSPApplicationService extends ILSPApplicationService.Stub {
     final static int DEX_TRANSACTION_CODE = 1310096052;
@@ -45,7 +49,18 @@ public class LSPApplicationService extends ILSPApplicationService.Stub {
     // key: <uid, pid>
     private final static Map<Pair<Integer, Integer>, ProcessInfo> processes = new ConcurrentHashMap<>();
 
-    static class ProcessInfo implements DeathRecipient {
+    static class HotReloadTarget(
+            Long id,
+            String modulePackageName,
+            String processName,
+            int uid,
+            int pid,
+            Long loadedVersionCode,
+            boolean hotReloadable
+    ) {
+        Integer state = AtomicInteger(HookedProcess.TARGET_STATE_UP_TO_DATE)
+    }
+    static class ProcessInfo implements IBinder.DeathRecipient {
         final int uid;
         final int pid;
         final String processName;
