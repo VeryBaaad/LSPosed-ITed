@@ -44,14 +44,11 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false
         }
         create("releaseLog") {
             initWith(getByName("release"))
             matchingFallbacks.add("release")
-            isMinifyEnabled = true
-            isShrinkResources = true
             buildConfigField("boolean", "RELEASE_LOG", "true")
         }
     }
