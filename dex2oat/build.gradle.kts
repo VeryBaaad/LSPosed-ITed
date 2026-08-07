@@ -52,7 +52,7 @@ android {
         release {
             isMinifyEnabled = false
         }
-        create("releaseLog") {
+        create("releaselog") {
             initWith(getByName("release"))
             matchingFallbacks.add("release")
         }

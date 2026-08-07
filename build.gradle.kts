@@ -46,7 +46,7 @@ cmaker {
         abiFilters("arm64-v8a", "armeabi-v7a", "x86", "x86_64", "riscv64")
     }
     buildTypes {
-        if (it.name == "release" || it.name == "releaseLog") {
+        if (it.name == "release" || it.name == "releaselog") {
             arguments += "-DDEBUG_SYMBOLS_PATH=${
                 layout.buildDirectory.dir("symbols").get().asFile.absolutePath
             }"

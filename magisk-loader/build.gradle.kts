@@ -68,7 +68,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
         }
-        create("releaseLog") {
+        create("releaselog") {
             initWith(getByName("release"))
             matchingFallbacks.add("release")
             isDebuggable = false
@@ -138,8 +138,8 @@ androidComponents.onVariants(androidComponents.selector().all()) { variant ->
     val magiskDir = layout.buildDirectory.dir("magisk/$variantLowered")
 
     val moduleId = "${flavorLowered}_$moduleBaseId"
-    val zipFileName = if (buildType == "releaseLog") "$moduleName-v$verName-$verCode-release-log.zip" else "$moduleName-v$verName-$verCode-$buildTypeLowered.zip"
-    val newVerName = if (buildType == "releaseLog") "$verName-log" else verName
+    val zipFileName = if (buildType == "releaselog") "$moduleName-v$verName-$verCode-release-log.zip" else "$moduleName-v$verName-$verCode-$buildTypeLowered.zip"
+    val newVerName = if (buildType == "releaselog") "$verName-log" else verName
 
     val prepareMagiskFilesTask = tasks.register<Sync>(
         "prepareMagiskFiles$variantCapped"

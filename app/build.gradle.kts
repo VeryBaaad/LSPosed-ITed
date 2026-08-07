@@ -67,7 +67,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
         }
-        create("releaseLog") {
+        create("releaselog") {
             initWith(getByName("release"))
             matchingFallbacks.add("release")
             isDebuggable = false
