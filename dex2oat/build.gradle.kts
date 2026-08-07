@@ -55,7 +55,6 @@ android {
         create("releaseLog") {
             initWith(getByName("release"))
             matchingFallbacks.add("release")
-            buildConfigField("boolean", "RELEASE_LOG", "true")
         }
     }
 }
