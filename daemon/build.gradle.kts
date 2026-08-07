@@ -51,6 +51,7 @@ android {
         )
         buildConfigField("String", "MANAGER_INJECTED_PKG_NAME", """"$injectedPackageName"""")
         buildConfigField("int", "MANAGER_INJECTED_UID", """$injectedPackageUid""")
+        buildConfigField("boolean", "RELEASE_LOG", "false")
     }
 
     buildTypes {
@@ -64,6 +65,15 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+        }
+        create("releaseLog") {
+            initWith(getByName("release"))
+            matchingFallbacks.add("release")
+            isDebuggable = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            buildConfigField("boolean", "RELEASE_LOG", "true")
+            versionNameSuffix = "-log"
         }
     }
 

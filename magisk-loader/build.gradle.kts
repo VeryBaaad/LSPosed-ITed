@@ -41,7 +41,7 @@ val defaultManagerPackageName = rootProject.extra["defaultManagerPackageName"] a
 val verCode = rootProject.extra["verCode"] as Int
 val verName = rootProject.extra["verName"] as String
 
-        android {
+android {
     flavorDimensions += "api"
 
     buildFeatures {
@@ -60,12 +60,22 @@ val verName = rootProject.extra["verName"] as String
         )
         buildConfigField("String", "MANAGER_INJECTED_PKG_NAME", """"$injectedPackageName"""")
         buildConfigField("int", "MANAGER_INJECTED_UID", """$injectedPackageUid""")
+        buildConfigField("boolean", "RELEASE_LOG", "false")
     }
 
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+        }
+        create("releaseLog") {
+            initWith(getByName("release"))
+            matchingFallbacks.add("release")
+            isDebuggable = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            buildConfigField("boolean", "RELEASE_LOG", "true")
+            versionNameSuffix = "-log"
         }
     }
 
@@ -128,7 +138,8 @@ androidComponents.onVariants(androidComponents.selector().all()) { variant ->
     val magiskDir = layout.buildDirectory.dir("magisk/$variantLowered")
 
     val moduleId = "${flavorLowered}_$moduleBaseId"
-    val zipFileName = "$moduleName-v$verName-$verCode-$buildTypeLowered.zip"
+    val zipFileName = if (buildType == "releaseLog") "$moduleName-v$verName-$verCode-release-log.zip" else "$moduleName-v$verName-$verCode-$buildTypeLowered.zip"
+    val newVerName = if (buildType == "releaseLog") "$verName-log" else verName
 
     val prepareMagiskFilesTask = tasks.register<Sync>(
         "prepareMagiskFiles$variantCapped"
@@ -149,7 +160,7 @@ androidComponents.onVariants(androidComponents.selector().all()) { variant ->
             include("module.prop")
             expand(
                 "moduleId" to moduleId,
-                "versionName" to "v$verName",
+                "versionName" to "v$newVerName",
                 "versionCode" to verCode,
                 "authorList" to authors,
                 "updateJson" to "https://lsposed.github.io/LSPosed/release/${flavorLowered}.json",
