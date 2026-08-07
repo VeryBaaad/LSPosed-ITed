@@ -47,4 +47,15 @@ android {
     prefab {
         register("dex2oat")
     }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+        }
+        create("releaseLog") {
+            initWith(getByName("release"))
+            matchingFallbacks.add("release")
+            buildConfigField("boolean", "RELEASE_LOG", "true")
+        }
+    }
 }
