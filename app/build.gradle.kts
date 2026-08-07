@@ -46,6 +46,7 @@ android {
     defaultConfig {
         applicationId = defaultManagerPackageName
         buildConfigField("long", "BUILD_TIME", Instant.now().epochSecond.toString())
+        buildConfigField("boolean", "RELEASE_LOG", "false")
     }
 
     packaging {
@@ -65,6 +66,15 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+        }
+        create("releaselog") {
+            initWith(getByName("release"))
+            matchingFallbacks.add("release")
+            isDebuggable = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            buildConfigField("boolean", "RELEASE_LOG", "true")
+            versionNameSuffix = "-log"
         }
     }
 

@@ -1122,7 +1122,7 @@ public class ConfigManager {
     }
 
     public void setVerboseLog(boolean on) {
-        if (BuildConfig.DEBUG) return;
+        if (BuildConfig.DEBUG || BuildConfig.RELEASE_LOG) return;
         var logcatService = ServiceManager.getLogcatService();
         if (on) {
             logcatService.startVerbose();
@@ -1134,7 +1134,7 @@ public class ConfigManager {
     }
 
     public boolean verboseLog() {
-        return BuildConfig.DEBUG || verboseLog;
+        return BuildConfig.DEBUG || BuildConfig.RELEASE_LOG || verboseLog;
     }
 
     public void setDexObfuscate(boolean on) {

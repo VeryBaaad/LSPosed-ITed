@@ -84,9 +84,9 @@ jobs:
         id: prepareArtifact
         run: |
           zygiskReleaseName=`ls magisk-loader/release/LSPosed-v*-release.zip | awk -F '(/|.zip)' '{print $3}'` && echo "zygiskReleaseName=$zygiskReleaseName" >> $GITHUB_OUTPUT
-          zygiskDebugName=`ls magisk-loader/release/LSPosed-v*-debug.zip | awk -F '(/|.zip)' '{print $3}'` && echo "zygiskDebugName=$zygiskDebugName" >> $GITHUB_OUTPUT
+          zygiskReleaseLogName=`ls magisk-loader/release/LSPosed-v*-release-log.zip | awk -F '(/|.zip)' '{print $3}'` && echo "zygiskReleaseLogName=$zygiskReleaseLogName" >> $GITHUB_OUTPUT
           unzip magisk-loader/release/LSPosed-v*-release.zip -d LSPosed-release
-          unzip magisk-loader/release/LSPosed-v*-debug.zip -d LSPosed-debug
+          unzip magisk-loader/release/LSPosed-v*-release-log.zip -d LSPosed-release-log
 
       - name: Post to channel
         if: ${{ success() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
@@ -99,9 +99,9 @@ jobs:
           if [ ! -z "${{ secrets.BOT_TOKEN }}" ]; then
             OUTPUT="magisk-loader/release/"
             export zygiskRelease=$(find $OUTPUT -name "LSPosed-v*-release.zip")
-            export zygiskDebug=$(find $OUTPUT -name "LSPosed-v*-debug.zip")
+            export zygiskReleaseLog=$(find $OUTPUT -name "LSPosed-v*-release-log.zip")
             ESCAPED=`python3 -c 'import json,os,urllib.parse; msg = json.dumps(os.environ["COMMIT_MESSAGE"]); print(urllib.parse.quote(msg if len(msg) <= 1024 else json.dumps(os.environ["COMMIT_URL"])))'`
-            curl -v "https://api.telegram.org/bot${BOT_TOKEN}/sendMediaGroup?chat_id=${CHAT_ID}&media=%5B%7B%22type%22%3A%22document%22%2C%20%22media%22%3A%22attach%3A%2F%2FzygiskRelease%22%7D%2C%7B%22type%22%3A%22document%22%2C%20%22media%22%3A%22attach%3A%2F%2FzygiskDebug%22%2C%22caption%22:${ESCAPED}%7D%5D" -F zygiskRelease="@$zygiskRelease" -F zygiskDebug="@$zygiskDebug"
+            curl -v "https://api.telegram.org/bot${BOT_TOKEN}/sendMediaGroup?chat_id=${CHAT_ID}&media=%5B%7B%22type%22%3A%22document%22%2C%20%22media%22%3A%22attach%3A%2F%2FzygiskRelease%22%7D%2C%7B%22type%22%3A%22document%22%2C%20%22media%22%3A%22attach%3A%2F%2FzygiskReleaseLog%22%2C%22caption%22:${ESCAPED}%7D%5D" -F zygiskRelease="@$zygiskRelease" -F zygiskReleaseLog="@$zygiskReleaseLog"
           fi
 
       - name: Upload zygisk release
@@ -110,11 +110,11 @@ jobs:
           name: ${{ steps.prepareArtifact.outputs.zygiskReleaseName }}
           path: "./LSPosed-release/*"
 
-      - name: Upload zygisk debug
+      - name: Upload zygisk release with log
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ steps.prepareArtifact.outputs.zygiskDebugName }}
-          path: "./LSPosed-debug/*"
+          name: ${{ steps.prepareArtifact.outputs.zygiskReleaseLogName }}
+          path: "./LSPosed-release-log/*"
 
       - name: Upload mappings
         uses: actions/upload-artifact@v7

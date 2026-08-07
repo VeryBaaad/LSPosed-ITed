@@ -46,7 +46,7 @@ cmaker {
         abiFilters("arm64-v8a", "armeabi-v7a", "x86", "x86_64", "riscv64")
     }
     buildTypes {
-        if (it.name == "release") {
+        if (it.name == "release" || it.name == "releaselog") {
             arguments += "-DDEBUG_SYMBOLS_PATH=${
                 layout.buildDirectory.dir("symbols").get().asFile.absolutePath
             }"
@@ -56,7 +56,7 @@ cmaker {
 
 val repo = jgit.repo()
 val commitCount = (repo?.commitCount("HEAD") ?: 1) + 4200
-val latestTag = repo?.latestTag?.removePrefix("v")?.substringBefore("-") ?: "2.0.0-ited"
+val latestTag = repo?.latestTag?.removePrefix("v")?.substringBefore("-") ?: "2.0.0-it"
 
 extra["injectedPackageName"] = "com.android.shell"
 extra["injectedPackageUid"] = 2000

@@ -39,6 +39,18 @@ android {
         buildConfigField("String", "FRAMEWORK_NAME", """"${rootProject.name}"""")
         buildConfigField("String", "VERSION_NAME", """"$verName"""")
         buildConfigField("long", "VERSION_CODE", """$verCode""")
+        buildConfigField("boolean", "RELEASE_LOG", "false")
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+        }
+        create("releaselog") {
+            initWith(getByName("release"))
+            matchingFallbacks.add("release")
+            buildConfigField("boolean", "RELEASE_LOG", "true")
+        }
     }
 }
 

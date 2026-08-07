@@ -47,4 +47,14 @@ android {
     prefab {
         register("dex2oat")
     }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+        }
+        create("releaselog") {
+            initWith(getByName("release"))
+            matchingFallbacks.add("release")
+        }
+    }
 }
