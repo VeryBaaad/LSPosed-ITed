@@ -127,7 +127,12 @@ jobs:
         if: ${{ success() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
         run: |
           V=$(echo "${{ steps.prepareArtifact.outputs.zygiskReleaseName }}" | cut -d'-' -f4)
-          curl -s -X POST "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendMessage" --data-urlencode "chat_id=${{ secrets.ITED_CHAT_ID }}" --data-urlencode "message_thread_id=${{ secrets.ITED_TOPIC_ID }}" --data-urlencode "text=$(printf 'New version pushed: %s\n新版本已推送： %s' "$V" "$V")" --data-urlencode "reply_markup={\"inline_keyboard\":[[{\"text\":\"Download / 下载\", \"url\":\"https://t.me/lspitedbot?start=dl\"}]]}"
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendMessage" \
+            --data-urlencode "chat_id=${{ secrets.ITED_CHAT_ID }}" \
+            --data-urlencode "message_thread_id=${{ secrets.ITED_TOPIC_ID }}" \
+            --data-urlencode "parse_mode=MarkdownV2" \
+            --data-urlencode "text=$(printf 'New version pushed: `%s`\n新版本已推送: `%s`' "$V" "$V")" \
+            --data-urlencode "reply_markup={\"inline_keyboard\":[[{\"text\":\"Download / 下载\", \"url\":\"https://t.me/lspitedbot?start=dl\"}]]}"
 
       - name: Upload zygisk release
         uses: actions/upload-artifact@v7
