@@ -37,7 +37,7 @@ jobs:
           fi
 
       - name: Setup Java
-        uses: actions/setup-java@v5.6.0
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
@@ -103,6 +103,31 @@ jobs:
             ESCAPED=`python3 -c 'import json,os,urllib.parse; msg = json.dumps(os.environ["COMMIT_MESSAGE"]); print(urllib.parse.quote(msg if len(msg) <= 1024 else json.dumps(os.environ["COMMIT_URL"])))'`
             curl -v "https://api.telegram.org/bot${BOT_TOKEN}/sendMediaGroup?chat_id=${CHAT_ID}&media=%5B%7B%22type%22%3A%22document%22%2C%20%22media%22%3A%22attach%3A%2F%2FzygiskRelease%22%7D%2C%7B%22type%22%3A%22document%22%2C%20%22media%22%3A%22attach%3A%2F%2FzygiskReleaseLog%22%2C%22caption%22:${ESCAPED}%7D%5D" -F zygiskRelease="@$zygiskRelease" -F zygiskReleaseLog="@$zygiskReleaseLog"
           fi
+
+      - name: Upload to repository
+        if: ${{ success() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+        run: |
+          git clone https://github.com/${{ secrets.GH_REPO }} itedist
+          cd itedist
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          rm -f ./LSPosed-v*-release.zip
+          rm -f ./LSPosed-v*-release-log.zip
+          cp ../magisk-loader/release/LSPosed-v*-release.zip .
+          cp ../magisk-loader/release/LSPosed-v*-release-log.zip .
+          rm -rf .git
+          git init
+          git branch -m main
+          git remote add origin https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/${{ secrets.GH_REPO }}
+          git add .
+          git commit -m "Initial commit"
+          git push origin main --force
+
+      - name: Notice to telegram
+        if: ${{ success() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+        run: |
+          V=$(echo "${{ steps.prepareArtifact.outputs.zygiskReleaseName }}" | cut -d'-' -f4)
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendMessage" --data-urlencode "chat_id=${{ secrets.ITED_CHAT_ID }}" --data-urlencode "message_thread_id=${{ secrets.ITED_TOPIC_ID }}" --data-urlencode "text=$(printf 'New version pushed: %s\n新版本已推送： %s' "$V" "$V")" --data-urlencode "reply_markup={\"inline_keyboard\":[[{\"text\":\"Download / 下载\", \"url\":\"https://t.me/lspitedbot?start=dl\"}]]}"
 
       - name: Upload zygisk release
         uses: actions/upload-artifact@v7
