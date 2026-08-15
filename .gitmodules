@@ -22,3 +22,6 @@
 [submodule "external/riscv64-inline-hook"]
 	path = external/riscv64-inline-hook
 	url = https://github.com/eirv/riscv64-inline-hook.git
+[submodule "external/machikado"]
+	path = external/machikado
+	url = https://github.com/VeryBaaad/machikado-cpp.git
