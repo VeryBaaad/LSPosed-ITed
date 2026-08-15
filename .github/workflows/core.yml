@@ -36,8 +36,8 @@ jobs:
             echo ${{ secrets.KEY_STORE }} | base64 --decode > key.jks
           fi
           if [ ! -z "${{ secrets.PRIVATE_KEY }}" ]; then
-            echo '${{ secrets.PUBLIC_KEY }}' | base64 --decode > module/public_key
-            echo '${{ secrets.PRIVATE_KEY }}' | base64 --decode > module/private_key
+            echo '${{ secrets.PUBLIC_KEY }}' | base64 --decode > magisk-loader/public_key
+            echo '${{ secrets.PRIVATE_KEY }}' | base64 --decode > magisk-loader/private_key
           fi
 
       - name: Setup Java

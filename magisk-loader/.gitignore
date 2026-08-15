@@ -1,3 +1,5 @@
 /build
 /release
 /.cxx
+public_key
+private_key

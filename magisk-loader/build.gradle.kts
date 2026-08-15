@@ -23,7 +23,17 @@ import org.apache.tools.ant.filters.ReplaceTokens
 import org.gradle.kotlin.dsl.register
 import org.gradle.kotlin.dsl.support.serviceOf
 import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.security.MessageDigest
+import java.security.KeyFactory
+import java.security.KeyPairGenerator
+import java.security.Signature
+import java.security.interfaces.EdECPrivateKey
+import java.security.interfaces.EdECPublicKey
+import java.security.spec.EdECPrivateKeySpec
+import java.security.spec.NamedParameterSpec
+import java.util.TreeSet
 
 plugins {
     alias(libs.plugins.agp.app)
@@ -207,6 +217,9 @@ androidComponents.onVariants(androidComponents.selector().all()) { variant ->
         }
 
         val injected = objects.newInstance<Injected>(magiskDir.get().asFile.path)
+
+        val root = magiskDir.get()
+
         doLast {
             if (file("private_key").exists()) {
                 println("=== Guards the peace of Machikado ===")
