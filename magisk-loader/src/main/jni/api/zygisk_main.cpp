@@ -52,7 +52,7 @@ namespace lspd {
         const auto mazoku_path = kModuleDir / "mazoku";
 
         if (!std::filesystem::exists(machikado_path) || !std::filesystem::exists(mazoku_path)) {
-            LOGE("module safety verification failed: missing machikado/mazoku files under %s",
+            LOGE("module safety verification failed: missing machikado/mazoku files under {}",
                  kModuleDir.c_str());
             return false;
         }
@@ -78,7 +78,7 @@ namespace lspd {
 
         if (!ok) {
             if (err) {
-                LOGE("module safety verification failed: %s", machikado::to_string(err.value()));
+                LOGE("module safety verification failed: {}", machikado::to_string(err.value()));
             } else {
                 LOGE("module safety verification failed");
             }
