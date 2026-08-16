@@ -67,7 +67,13 @@ namespace lspd {
                 (std::istreambuf_iterator<char>(mazoku_in)),
                 std::istreambuf_iterator<char>());
 
-        auto entries = machikado::load_folder_files(kModuleDir, {}, {"machikado", "system.prop"}, nullptr);
+        auto entries_opt = machikado::load_folder_files(kModuleDir, {}, {"machikado", "system.prop"}, nullptr);
+        if (!entries_opt) {
+            LOGE("module safety verification failed: cannot load");
+            retrun false;
+        }
+
+        auto entries = *entries_opt
         auto [ok, err] = machikado::verify(machikado_blob, mazoku_blob, entries, kModuleId, kExpectedOrgPk);
 
         if (!ok) {
