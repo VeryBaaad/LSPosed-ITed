@@ -260,6 +260,7 @@ androidComponents.onVariants(androidComponents.selector().all()) { variant ->
                     set.add(Pair(root.file("daemon.apk").asFile, null))
                     set.add(Pair(root.file("daemon").asFile, null))
                     set.add(Pair(root.file("manager.apk").asFile, null))
+                    set.add(Pair(root.file("mazoku").asFile, null))
                     set.add(
                         Pair(
                             root.file("zygisk/$abi.so").asFile,
@@ -299,6 +300,7 @@ androidComponents.onVariants(androidComponents.selector().all()) { variant ->
                     set.add(Pair(root.file("daemon.apk").asFile, null))
                     set.add(Pair(root.file("daemon").asFile, null))
                     set.add(Pair(root.file("manager.apk").asFile, null))
+                    set.add(Pair(root.file("mazoku").asFile, null))
                     set.add(
                         Pair(
                             root.file("zygisk/$abi32.so").asFile,
