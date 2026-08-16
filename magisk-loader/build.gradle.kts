@@ -232,7 +232,7 @@ androidComponents.onVariants(androidComponents.selector().all()) { variant ->
                 val sig = Signature.getInstance("ed25519")
                 fun File.sha(rootDir: File, realFile: File? = null) {
                     val path = this.toRelativeString(rootDir).replace("\\", "/")
-                    sig.update(this.name.toByteArray())
+                    sig.update(path.toByteArray())
                     sig.update(0) // null-terminated string
                     val real = realFile ?: this
                     val buffer = ByteBuffer.allocate(8)
