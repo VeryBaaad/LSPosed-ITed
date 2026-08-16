@@ -75,6 +75,9 @@ fi
 # Extract libs
 ui_print "- Extracting module files"
 
+extract "$ZIPFILE" "machikado.$ARCH"    "$MODPATH"
+mv "$MODPATH/machikado.$ARCH" "$MODPATH/machikado"
+
 extract "$ZIPFILE" 'module.prop'        "$MODPATH"
 extract "$ZIPFILE" 'action.sh'          "$MODPATH"
 extract "$ZIPFILE" 'post-fs-data.sh'    "$MODPATH"
@@ -86,6 +89,7 @@ extract "$ZIPFILE" 'daemon.apk'         "$MODPATH"
 extract "$ZIPFILE" 'daemon'             "$MODPATH"
 rm -f /data/adb/lspd/manager.apk
 extract "$ZIPFILE" 'manager.apk'        "$MODPATH"
+extract "$ZIPFILE" 'mazoku'             "$MODPATH"
 
 mkdir -p "$MODPATH/zygisk"
 if [ "$ARCH" = "arm" ] || [ "$ARCH" = "arm64" ]; then
