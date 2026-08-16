@@ -23,7 +23,17 @@ import org.apache.tools.ant.filters.ReplaceTokens
 import org.gradle.kotlin.dsl.register
 import org.gradle.kotlin.dsl.support.serviceOf
 import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.security.MessageDigest
+import java.security.KeyFactory
+import java.security.KeyPairGenerator
+import java.security.Signature
+import java.security.interfaces.EdECPrivateKey
+import java.security.interfaces.EdECPublicKey
+import java.security.spec.EdECPrivateKeySpec
+import java.security.spec.NamedParameterSpec
+import java.util.TreeSet
 
 plugins {
     alias(libs.plugins.agp.app)
@@ -197,7 +207,7 @@ androidComponents.onVariants(androidComponents.selector().all()) { variant ->
                 include("**/dex2oat")
             }
         }
-        val dexOutPath = if (buildTypeLowered == "release")
+        val dexOutPath = if (buildTypeLowered == "release" || buildTypeLowered == "releaselog")
             layout.buildDirectory.dir("intermediates/dex/$variantCapped/minify${variantCapped}WithR8")
         else
             layout.buildDirectory.dir("intermediates/dex/$variantCapped/mergeDex$variantCapped")
@@ -207,7 +217,144 @@ androidComponents.onVariants(androidComponents.selector().all()) { variant ->
         }
 
         val injected = objects.newInstance<Injected>(magiskDir.get().asFile.path)
+
+        val root = magiskDir.get()
+
         doLast {
+            if (file("private_key").exists()) {
+                println("=== Guards the peace of Machikado ===")
+                val privateKey = file("private_key").readBytes()
+                val publicKey = file("public_key").readBytes()
+                val namedSpec = NamedParameterSpec("ed25519")
+                val privKeySpec = EdECPrivateKeySpec(namedSpec, privateKey)
+                val kf = KeyFactory.getInstance("ed25519")
+                val privKey = kf.generatePrivate(privKeySpec);
+                val sig = Signature.getInstance("ed25519")
+                fun File.sha(rootDir: File, realFile: File? = null) {
+                    val path = this.toRelativeString(rootDir).replace("\\", "/")
+                    sig.update(this.name.toByteArray())
+                    sig.update(0) // null-terminated string
+                    val real = realFile ?: this
+                    val buffer = ByteBuffer.allocate(8)
+                        .order(ByteOrder.LITTLE_ENDIAN)
+                        .putLong(real.length())
+                        .array()
+                    sig.update(buffer)
+                    real.forEachBlock { bytes, size ->
+                        sig.update(bytes, 0, size)
+                    }
+                }
+
+                fun getSign(name: String, abi: String, abiBits: String) {
+                    val set = TreeSet<Pair<File, File?>> { o1, o2 ->
+                        o1.first.path.replace("\\", "/")
+                            .compareTo(o2.first.path.replace("\\", "/"))
+                    }
+                    set.add(Pair(root.file("module.prop").asFile, null))
+                    set.add(Pair(root.file("action.sh").asFile, null))
+                    set.add(Pair(root.file("post-fs-data.sh").asFile, null))
+                    set.add(Pair(root.file("service.sh").asFile, null))
+                    set.add(Pair(root.file("uninstall.sh").asFile, null))
+                    set.add(Pair(root.file("sepolicy.rule").asFile, null))
+                    set.add(Pair(root.file("framework/lspd.dex").asFile, null))
+                    set.add(Pair(root.file("daemon.apk").asFile, null))
+                    set.add(Pair(root.file("daemon").asFile, null))
+                    set.add(Pair(root.file("manager.apk").asFile, null))
+                    set.add(
+                        Pair(
+                            root.file("zygisk/$abi.so").asFile,
+                            root.file("lib/$abi/liblspd.so").asFile
+                        )
+                    )
+                    set.add(
+                        Pair(
+                            root.file("bin/dex2oat$abiBits").asFile,
+                            root.file("bin/$abi/dex2oat").asFile
+                        )
+                    )
+                    set.add(
+                        Pair(
+                            root.file("lib/libpreload$abiBits.so").asFile,
+                            root.file("lib/$abi/libpreload.so").asFile
+                        )
+                    )
+                    sig.initSign(privKey)
+                    set.forEach { it.first.sha(root.asFile, it.second) }
+                    val signFile = root.file(name).asFile
+                    signFile.writeBytes(sig.sign())
+                    signFile.appendBytes(publicKey)
+                }
+                fun getSigns(name: String, abi32: String, abi64: String) {
+                    val set = TreeSet<Pair<File, File?>> { o1, o2 ->
+                        o1.first.path.replace("\\", "/")
+                            .compareTo(o2.first.path.replace("\\", "/"))
+                    }
+                    set.add(Pair(root.file("module.prop").asFile, null))
+                    set.add(Pair(root.file("action.sh").asFile, null))
+                    set.add(Pair(root.file("post-fs-data.sh").asFile, null))
+                    set.add(Pair(root.file("service.sh").asFile, null))
+                    set.add(Pair(root.file("uninstall.sh").asFile, null))
+                    set.add(Pair(root.file("sepolicy.rule").asFile, null))
+                    set.add(Pair(root.file("framework/lspd.dex").asFile, null))
+                    set.add(Pair(root.file("daemon.apk").asFile, null))
+                    set.add(Pair(root.file("daemon").asFile, null))
+                    set.add(Pair(root.file("manager.apk").asFile, null))
+                    set.add(
+                        Pair(
+                            root.file("zygisk/$abi32.so").asFile,
+                            root.file("lib/$abi32/liblspd.so").asFile
+                        )
+                    )
+                    set.add(
+                        Pair(
+                            root.file("zygisk/$abi64.so").asFile,
+                            root.file("lib/$abi64/liblspd.so").asFile
+                        )
+                    )
+                    set.add(
+                        Pair(
+                            root.file("bin/dex2oat32").asFile,
+                            root.file("bin/$abi32/dex2oat").asFile
+                        )
+                    )
+                    set.add(
+                        Pair(
+                            root.file("bin/dex2oat64").asFile,
+                            root.file("bin/$abi64/dex2oat").asFile
+                        )
+                    )
+                    set.add(
+                        Pair(
+                            root.file("lib/libpreload32.so").asFile,
+                            root.file("lib/$abi32/libpreload.so").asFile
+                        )
+                    )
+                    set.add(
+                        Pair(
+                            root.file("lib/libpreload64.so").asFile,
+                            root.file("lib/$abi64/libpreload.so").asFile
+                        )
+                    )
+                    sig.initSign(privKey)
+                    set.forEach { it.first.sha(root.asFile, it.second) }
+                    val signFile = root.file(name).asFile
+                    signFile.writeBytes(sig.sign())
+                    signFile.appendBytes(publicKey)
+                }
+                getSigns("machikado.arm64", "armeabi-v7a", "arm64-v8a")
+                getSigns("machikado.x64", "x86", "x86_64")
+                getSign("machikado.arm", "armeabi-v7a", "32")
+                getSign("machikado.x86", "x86", "32")
+                getSign("machikado.riscv64", "riscv64", "64")
+            } else {
+                println("no private_key found, this build will not be signed")
+                root.file("machikado.arm64").asFile.createNewFile()
+                root.file("machikado.arm").asFile.createNewFile()
+                root.file("machikado.x64").asFile.createNewFile()
+                root.file("machikado.x86").asFile.createNewFile()
+                root.file("machikado.riscv64").asFile.createNewFile()
+            }
+
             injected.factory.fileTree().from(injected.magiskDir).visit {
                 if (isDirectory) return@visit
                 val md = MessageDigest.getInstance("SHA-256")

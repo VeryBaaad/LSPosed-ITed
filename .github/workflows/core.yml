@@ -35,6 +35,10 @@ jobs:
             echo androidStoreFile='key.jks' >> gradle.properties
             echo ${{ secrets.KEY_STORE }} | base64 --decode > key.jks
           fi
+          if [ ! -z "${{ secrets.PRIVATE_KEY }}" ]; then
+            echo '${{ secrets.PUBLIC_KEY }}' | base64 --decode > magisk-loader/public_key
+            echo '${{ secrets.PRIVATE_KEY }}' | base64 --decode > magisk-loader/private_key
+          fi
 
       - name: Setup Java
         uses: actions/setup-java@v5
