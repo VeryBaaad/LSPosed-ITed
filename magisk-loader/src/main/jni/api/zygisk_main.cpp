@@ -70,10 +70,10 @@ namespace lspd {
         auto entries_opt = machikado::load_folder_files(kModuleDir, {}, {"machikado", "system.prop"}, nullptr);
         if (!entries_opt) {
             LOGE("module safety verification failed: cannot load");
-            retrun false;
+            return false;
         }
 
-        auto entries = *entries_opt
+        auto entries = *entries_opt;
         auto [ok, err] = machikado::verify(machikado_blob, mazoku_blob, entries, kModuleId, kExpectedOrgPk);
 
         if (!ok) {
