@@ -34,6 +34,8 @@ import java.security.interfaces.EdECPublicKey
 import java.security.spec.EdECPrivateKeySpec
 import java.security.spec.NamedParameterSpec
 import java.util.TreeSet
+import xyz.baaad.machikado.Sign
+import xyz.baaad.machikado.Utils
 
 plugins {
     alias(libs.plugins.agp.app)
@@ -130,6 +132,7 @@ dependencies {
     implementation(projects.services.daemonService)
     compileOnly(libs.androidx.annotation)
     compileOnly(projects.hiddenapi.stubs)
+    compileOnly(libs.machikado.java)
 }
 
 val zipAll = tasks.register("zipAll", fun Task.() {
@@ -224,124 +227,54 @@ androidComponents.onVariants(androidComponents.selector().all()) { variant ->
             if (file("private_key").exists()) {
                 println("=== Guards the peace of Machikado ===")
                 val privateKey = file("private_key").readBytes()
-                val publicKey = file("public_key").readBytes()
-                val namedSpec = NamedParameterSpec("ed25519")
-                val privKeySpec = EdECPrivateKeySpec(namedSpec, privateKey)
-                val kf = KeyFactory.getInstance("ed25519")
-                val privKey = kf.generatePrivate(privKeySpec);
-                val sig = Signature.getInstance("ed25519")
-                fun File.sha(rootDir: File, realFile: File? = null) {
-                    val path = this.toRelativeString(rootDir).replace("\\", "/")
-                    sig.update(path.toByteArray())
-                    sig.update(0) // null-terminated string
-                    val real = realFile ?: this
-                    val buffer = ByteBuffer.allocate(8)
-                        .order(ByteOrder.LITTLE_ENDIAN)
-                        .putLong(real.length())
-                        .array()
-                    sig.update(buffer)
-                    real.forEachBlock { bytes, size ->
-                        sig.update(bytes, 0, size)
-                    }
-                }
-
                 fun getSign(name: String, abi: String, abiBits: String) {
-                    val set = TreeSet<Pair<File, File?>> { o1, o2 ->
-                        o1.first.path.replace("\\", "/")
-                            .compareTo(o2.first.path.replace("\\", "/"))
-                    }
-                    set.add(Pair(root.file("module.prop").asFile, null))
-                    set.add(Pair(root.file("action.sh").asFile, null))
-                    set.add(Pair(root.file("post-fs-data.sh").asFile, null))
-                    set.add(Pair(root.file("service.sh").asFile, null))
-                    set.add(Pair(root.file("uninstall.sh").asFile, null))
-                    set.add(Pair(root.file("sepolicy.rule").asFile, null))
-                    set.add(Pair(root.file("framework/lspd.dex").asFile, null))
-                    set.add(Pair(root.file("daemon.apk").asFile, null))
-                    set.add(Pair(root.file("daemon").asFile, null))
-                    set.add(Pair(root.file("manager.apk").asFile, null))
-                    set.add(Pair(root.file("mazoku").asFile, null))
-                    set.add(
-                        Pair(
-                            root.file("zygisk/$abi.so").asFile,
-                            root.file("lib/$abi/liblspd.so").asFile
-                        )
+                    val mapping = Utils.FileMapping()
+                    mapping.insert("module.prop", null)
+                    mapping.insert("action.sh", null)
+                    mapping.insert("post-fs-data.sh", null)
+                    mapping.insert("service.sh", null)
+                    mapping.insert("uninstall.sh", null)
+                    mapping.insert("sepolicy.rule", null)
+                    mapping.insert("framework/lspd.dex", null)
+                    mapping.insert("daemon.apk", null)
+                    mapping.insert("daemon", null)
+                    mapping.insert("manager.apk", null)
+                    mapping.insert("mazoku", null)
+                    mapping.insert("zygisk/$abi.so", "lib/$abi/liblspd.so")
+                    mapping.insert("bin/dex2oat$abiBits", "bin/$abi/dex2oat")
+                    mapping.insert("lib/libpreload$abiBits.so", "lib/$abi/libpreload.so")
+                    val entries: MutableList<Utils.FileEntry> = Utils.loadFromMapping(
+                        root,
+                        mapping
                     )
-                    set.add(
-                        Pair(
-                            root.file("bin/dex2oat$abiBits").asFile,
-                            root.file("bin/$abi/dex2oat").asFile
-                        )
-                    )
-                    set.add(
-                        Pair(
-                            root.file("lib/libpreload$abiBits.so").asFile,
-                            root.file("lib/$abi/libpreload.so").asFile
-                        )
-                    )
-                    sig.initSign(privKey)
-                    set.forEach { it.first.sha(root.asFile, it.second) }
-                    val signFile = root.file(name).asFile
-                    signFile.writeBytes(sig.sign())
-                    signFile.appendBytes(publicKey)
+                    Sign.SignedBlob machikado = Sign.signFileEntries(entries, privateKey);
+                    Files.write(root.file(name).asFile.toPath(), machikado.asBytes());
                 }
                 fun getSigns(name: String, abi32: String, abi64: String) {
-                    val set = TreeSet<Pair<File, File?>> { o1, o2 ->
-                        o1.first.path.replace("\\", "/")
-                            .compareTo(o2.first.path.replace("\\", "/"))
-                    }
-                    set.add(Pair(root.file("module.prop").asFile, null))
-                    set.add(Pair(root.file("action.sh").asFile, null))
-                    set.add(Pair(root.file("post-fs-data.sh").asFile, null))
-                    set.add(Pair(root.file("service.sh").asFile, null))
-                    set.add(Pair(root.file("uninstall.sh").asFile, null))
-                    set.add(Pair(root.file("sepolicy.rule").asFile, null))
-                    set.add(Pair(root.file("framework/lspd.dex").asFile, null))
-                    set.add(Pair(root.file("daemon.apk").asFile, null))
-                    set.add(Pair(root.file("daemon").asFile, null))
-                    set.add(Pair(root.file("manager.apk").asFile, null))
-                    set.add(Pair(root.file("mazoku").asFile, null))
-                    set.add(
-                        Pair(
-                            root.file("zygisk/$abi32.so").asFile,
-                            root.file("lib/$abi32/liblspd.so").asFile
-                        )
+                    val mapping = Utils.FileMapping()
+                    mapping.insert("module.prop", null)
+                    mapping.insert("action.sh", null)
+                    mapping.insert("post-fs-data.sh", null)
+                    mapping.insert("service.sh", null)
+                    mapping.insert("uninstall.sh", null)
+                    mapping.insert("sepolicy.rule", null)
+                    mapping.insert("framework/lspd.dex", null)
+                    mapping.insert("daemon.apk", null)
+                    mapping.insert("daemon", null)
+                    mapping.insert("manager.apk", null)
+                    mapping.insert("mazoku", null)
+                    mapping.insert("zygisk/$abi32.so", "lib/$abi32/liblspd.so")
+                    mapping.insert("zygisk/$abi64.so", "lib/$abi64/liblspd.so")
+                    mapping.insert("bin/dex2oat32", "bin/$abi32/dex2oat")
+                    mapping.insert("bin/dex2oat64", "bin/$abi64/dex2oat")
+                    mapping.insert("lib/libpreload32.so", "lib/$abi32/libpreload.so")
+                    mapping.insert("lib/libpreload64.so", "lib/$abi64/libpreload.so")
+                    val entries: MutableList<Utils.FileEntry> = Utils.loadFromMapping(
+                        root,
+                        mapping
                     )
-                    set.add(
-                        Pair(
-                            root.file("zygisk/$abi64.so").asFile,
-                            root.file("lib/$abi64/liblspd.so").asFile
-                        )
-                    )
-                    set.add(
-                        Pair(
-                            root.file("bin/dex2oat32").asFile,
-                            root.file("bin/$abi32/dex2oat").asFile
-                        )
-                    )
-                    set.add(
-                        Pair(
-                            root.file("bin/dex2oat64").asFile,
-                            root.file("bin/$abi64/dex2oat").asFile
-                        )
-                    )
-                    set.add(
-                        Pair(
-                            root.file("lib/libpreload32.so").asFile,
-                            root.file("lib/$abi32/libpreload.so").asFile
-                        )
-                    )
-                    set.add(
-                        Pair(
-                            root.file("lib/libpreload64.so").asFile,
-                            root.file("lib/$abi64/libpreload.so").asFile
-                        )
-                    )
-                    sig.initSign(privKey)
-                    set.forEach { it.first.sha(root.asFile, it.second) }
-                    val signFile = root.file(name).asFile
-                    signFile.writeBytes(sig.sign())
-                    signFile.appendBytes(publicKey)
+                    Sign.SignedBlob machikado = Sign.signFileEntries(entries, privateKey);
+                    Files.write(root.file(name).asFile.toPath(), machikado.asBytes());
                 }
                 getSigns("machikado.arm64", "armeabi-v7a", "arm64-v8a")
                 getSigns("machikado.x64", "x86", "x86_64")

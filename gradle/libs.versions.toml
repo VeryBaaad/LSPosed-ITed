@@ -8,6 +8,7 @@ startupRuntime = "1.2.0"
 ndk = "29.0.13599879-beta2"
 libxposed-annotation = "1.0.0"
 libxposed-lint = "1.0.0"
+machikado-java = "3.0.0"
 
 [plugins]
 agp-lib = { id = "com.android.library", version.ref = "agp" }
@@ -64,3 +65,5 @@ kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-c
 
 libxposed-annotation = { group = "io.github.libxposed", name = "annotation", version.ref = "libxposed-annotation" }
 libxposed-lint = { group = "io.github.libxposed", name = "lint", version.ref = "libxposed-lint" }
+
+machikado-java = { group = "xyz.baaad.machikado", name = "java", version.ref = "machikado-java" }
