@@ -140,13 +140,6 @@ public class LSPosedContext implements XposedInterface {
             }
             var librarySearchPath = sb.toString();
             var initLoader = XposedModule.class.getClassLoader();
-            var mcl = LspModuleClassLoader.loadApk(module.apkPath, module.file.preLoadedDexes, librarySearchPath, initLoader);
-            if (mcl.loadClass(XposedModule.class.getName()).getClassLoader() != initLoader) {
-                Log.e(TAG, "  Cannot load module: " + module.packageName);
-                Log.e(TAG, "  The Xposed API classes are compiled into the module's APK.");
-                Log.e(TAG, "  This may cause strange issues and must be fixed by the module developer.");
-                return false;
-            }
             try {
                 ZipFile zipFile = new ZipFile(module.apkPath);
                 ZipEntry propEntry = zipFile.getEntry("META-INF/xposed/module.prop");
@@ -161,6 +154,13 @@ public class LSPosedContext implements XposedInterface {
                 zipFile.close();
             } catch (Throwable e) {
                 Log.e(TAG, "Error on load base of " + module.apkPath, e);
+            }
+            var mcl = LspModuleClassLoader.loadApk(module.apkPath, module.file.preLoadedDexes, librarySearchPath, initLoader, targetApiVersion >= XposedInterface.API_102);
+            if (mcl.loadClass(XposedModule.class.getName()).getClassLoader() != initLoader) {
+                Log.e(TAG, "  Cannot load module: " + module.packageName);
+                Log.e(TAG, "  The Xposed API classes are compiled into the module's APK.");
+                Log.e(TAG, "  This may cause strange issues and must be fixed by the module developer.");
+                return false;
             }
             LSPosedContext ctx;
             ExceptionMode defaultExceptionMode;
