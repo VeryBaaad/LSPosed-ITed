@@ -6,3 +6,6 @@
 /build
 /captures
 /key.jks
+/debug.keystore
+/.kotlin
+

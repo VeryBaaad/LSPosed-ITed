@@ -30,7 +30,7 @@ import android.util.Log;
 import org.lsposed.lspd.ILSPManagerService;
 import org.lsposed.lspd.models.Application;
 import org.lsposed.lspd.models.UserInfo;
-import org.lsposed.manager.adapters.ScopeAdapter;
+import org.lsposed.manager.data.model.ApplicationWithEquals;
 import org.lsposed.manager.receivers.LSPManagerServiceHolder;
 
 import java.io.File;
@@ -100,7 +100,7 @@ public class ConfigManager {
         }
     }
 
-    public static boolean setModuleScope(String packageName, boolean legacy, Set<ScopeAdapter.ApplicationWithEquals> applications) {
+    public static boolean setModuleScope(String packageName, boolean legacy, Set<ApplicationWithEquals> applications) {
         try {
             List<Application> list = new ArrayList<>();
             applications.forEach(application -> {
@@ -122,8 +122,8 @@ public class ConfigManager {
         }
     }
 
-    public static List<ScopeAdapter.ApplicationWithEquals> getModuleScope(String packageName) {
-        List<ScopeAdapter.ApplicationWithEquals> list = new ArrayList<>();
+    public static List<ApplicationWithEquals> getModuleScope(String packageName) {
+        List<ApplicationWithEquals> list = new ArrayList<>();
         try {
             var applications = LSPManagerServiceHolder.getService().getModuleScope(packageName);
             if (applications == null) {
@@ -131,7 +131,7 @@ public class ConfigManager {
             }
             applications.forEach(application -> {
                 if (!application.packageName.equals(packageName)) {
-                    list.add(new ScopeAdapter.ApplicationWithEquals(application));
+                    list.add(new ApplicationWithEquals(application));
                 }
             });
         } catch (RemoteException e) {
