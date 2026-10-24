@@ -27,6 +27,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.content.res.Configuration;
+import android.content.res.Resources;
 import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
@@ -39,7 +41,6 @@ import android.text.TextUtils;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.AppCompatDelegate;
 import androidx.preference.PreferenceManager;
 
 import org.lsposed.hiddenapibypass.HiddenApiBypass;
@@ -48,7 +49,6 @@ import org.lsposed.manager.receivers.LSPManagerServiceHolder;
 import org.lsposed.manager.repo.RepoLoader;
 import org.lsposed.manager.util.CloudflareDNS;
 import org.lsposed.manager.util.ModuleUtil;
-import org.lsposed.manager.util.ThemeUtil;
 import org.lsposed.manager.util.UpdateUtil;
 
 import java.io.ByteArrayOutputStream;
@@ -190,7 +190,6 @@ public class App extends Application {
                 pref.edit().putBoolean("doh", true).apply();
             }
         }
-        AppCompatDelegate.setDefaultNightMode(ThemeUtil.getDarkTheme());
         LocaleDelegate.setDefaultLocale(getLocale());
         var res = getResources();
         var config = res.getConfiguration();
@@ -260,5 +259,15 @@ public class App extends Application {
     public static Locale getLocale() {
         String tag = getPreferences().getString("language", null);
         return getLocale(tag);
+    }
+
+    @SuppressWarnings("deprecation")
+    public static void applyLocale(String tag) {
+        Locale locale = getLocale(tag);
+        LocaleDelegate.setDefaultLocale(locale);
+        Resources res = instance.getResources();
+        Configuration config = res.getConfiguration();
+        config.setLocale(locale);
+        res.updateConfiguration(config, res.getDisplayMetrics());
     }
 }

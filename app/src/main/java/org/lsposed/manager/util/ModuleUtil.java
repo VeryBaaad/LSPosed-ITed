@@ -61,9 +61,9 @@ public final class ModuleUtil {
     private static ModuleUtil instance = null;
     private final PackageManager pm;
     private final Set<ModuleListener> listeners = ConcurrentHashMap.newKeySet();
-    private HashSet<Pair<String, Integer>> enabledModules = new HashSet<>();
+    private Set<Pair<String, Integer>> enabledModules = ConcurrentHashMap.newKeySet();
     private List<UserInfo> users = new ArrayList<>();
-    private Map<Pair<String, Integer>, InstalledModule> installedModules = new HashMap<>();
+    private Map<Pair<String, Integer>, InstalledModule> installedModules = new ConcurrentHashMap<>();
     private boolean modulesLoaded = false;
 
     static final int MATCH_ANY_USER = 0x00400000; // PackageManager.MATCH_ANY_USER
@@ -178,7 +178,7 @@ public final class ModuleUtil {
             return;
         }
 
-        Map<Pair<String, Integer>, InstalledModule> modules = new HashMap<>();
+        Map<Pair<String, Integer>, InstalledModule> modules = new ConcurrentHashMap<>();
         var users = ConfigManager.getUsers();
         for (PackageInfo pkg : ConfigManager.getInstalledPackagesFromAllUsers(PackageManager.GET_META_DATA | MATCH_ALL_FLAGS, false)) {
             ApplicationInfo app = pkg.applicationInfo;
@@ -198,7 +198,7 @@ public final class ModuleUtil {
 
         enabledModules = ConfigManager.getEnabledModules().stream()
                 .map(module -> Pair.create(module.packageName, module.userId))
-                .collect(Collectors.toCollection(HashSet::new));
+                .collect(Collectors.toCollection(() -> ConcurrentHashMap.newKeySet()));
         modulesLoaded = true;
         listeners.forEach(ModuleListener::onModulesReloaded);
     }

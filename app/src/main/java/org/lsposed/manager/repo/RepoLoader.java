@@ -55,7 +55,7 @@ import okhttp3.ResponseBody;
 
 public class RepoLoader {
     private static RepoLoader instance = null;
-    private Map<String, OnlineModule> onlineModules = new HashMap<>();
+    private Map<String, OnlineModule> onlineModules = new ConcurrentHashMap<>();
     private Map<String, ModuleVersion> latestVersion = new ConcurrentHashMap<>();
 
     public static class ModuleVersion {
@@ -142,7 +142,7 @@ public class RepoLoader {
             byte[] encoded = Files.readAllBytes(repoFile);
             String bodyString = new String(encoded, StandardCharsets.UTF_8);
             Gson gson = new Gson();
-            Map<String, OnlineModule> modules = new HashMap<>();
+            Map<String, OnlineModule> modules = new ConcurrentHashMap<>();
             OnlineModule[] repoModules = gson.fromJson(bodyString, OnlineModule[].class);
             Arrays.stream(repoModules).forEach(onlineModule -> modules.put(onlineModule.getName(), onlineModule));
             var channel = App.getPreferences().getString("update_channel", channels[0]);

@@ -21,7 +21,7 @@ import java.time.Instant
 
 plugins {
     alias(libs.plugins.agp.app)
-    alias(libs.plugins.nav.safeargs)
+    alias(libs.plugins.compose.compiler)
     alias(libs.plugins.autoresconfig)
     alias(libs.plugins.materialthemebuilder)
     alias(libs.plugins.lsplugin.resopt)
@@ -38,9 +38,18 @@ apksign {
 val defaultManagerPackageName = rootProject.extra["defaultManagerPackageName"] as String
 
 android {
+    val localDebugKeystore = rootProject.file("debug.keystore")
+    if (localDebugKeystore.exists()) {
+        signingConfigs.getByName("debug").apply {
+            storeFile = localDebugKeystore
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
     buildFeatures {
-        viewBinding = true
         buildConfig = true
+        compose = true
     }
 
     defaultConfig {
@@ -131,19 +140,22 @@ materialThemeBuilder {
 }
 
 dependencies {
-    annotationProcessor(libs.glide.compiler)
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.ui.tooling.preview)
+    implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material.icons.extended)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.navigation.compose)
+    implementation(libs.material.kolor)
+    implementation(libs.kotlinx.coroutines.android)
+    debugImplementation(libs.androidx.compose.ui.tooling)
     implementation(libs.androidx.activity)
     implementation(libs.androidx.browser)
-    implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.core)
-    implementation(libs.androidx.fragment)
-    implementation(libs.androidx.navigation.fragment)
-    implementation(libs.androidx.navigation.ui)
     implementation(libs.androidx.preference)
-    implementation(libs.androidx.recyclerview)
-    implementation(libs.androidx.swiperefreshlayout)
-    implementation(libs.androidx.startup.runtime)
-    implementation(libs.glide)
     implementation(libs.material)
     implementation(libs.gson)
     implementation(libs.okhttp)
@@ -153,12 +165,6 @@ dependencies {
     implementation(libs.rikkax.core)
     implementation(libs.rikkax.insets)
     implementation(libs.rikkax.material)
-    implementation(libs.rikkax.material.preference)
-    implementation(libs.rikkax.recyclerview)
-    implementation(libs.rikkax.widget.borderview)
-    implementation(libs.rikkax.widget.mainswitchbar)
-    implementation(libs.rikkax.layoutinflater)
-    implementation(libs.appiconloader)
     implementation(libs.hiddenapibypass)
     implementation(libs.kotlin.stdlib)
     implementation(libs.kotlinx.coroutines.core)
@@ -167,7 +173,6 @@ dependencies {
 }
 
 configurations.all {
-    exclude("org.jetbrains", "annotations")
     exclude("androidx.appcompat", "appcompat")
     exclude("org.jetbrains.kotlin", "kotlin-stdlib-jdk7")
     exclude("org.jetbrains.kotlin", "kotlin-stdlib-jdk8")

@@ -22,16 +22,13 @@ package org.lsposed.manager.adapters;
 
 import android.annotation.SuppressLint;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.os.Parcel;
-import android.view.MenuItem;
 
 import org.lsposed.manager.ConfigManager;
-import org.lsposed.manager.R;
 
 import java.util.Collections;
 import java.util.Comparator;
@@ -90,29 +87,6 @@ public class AppHelper {
                 ris.get(0).activityInfo.name);
         intent.putExtra("lsp_no_switch_to_user", (ris.get(0).activityInfo.flags & FLAG_SHOW_FOR_ALL_USERS) != 0);
         return intent;
-    }
-
-    public static boolean onOptionsItemSelected(MenuItem item, SharedPreferences preferences) {
-        int itemId = item.getItemId();
-        int i = preferences.getInt("list_sort", 0);
-        if (itemId == R.id.item_sort_by_name) {
-            i = (i % 2 == 0) ? 0 : 1;
-        } else if (itemId == R.id.item_sort_by_package_name) {
-            i = (i % 2 == 0) ? 2 : 3;
-        } else if (itemId == R.id.item_sort_by_install_time) {
-            i = (i % 2 == 0) ? 4 : 5;
-        } else if (itemId == R.id.item_sort_by_update_time) {
-            i = (i % 2 == 0) ? 6 : 7;
-        } else if (itemId == R.id.reverse) {
-            if (i % 2 == 0) i++;
-            else i--;
-        } else {
-            return false;
-        }
-        preferences.edit().putInt("list_sort", i).apply();
-        if (item.isCheckable())
-            item.setChecked(!item.isChecked());
-        return true;
     }
 
     public static Comparator<PackageInfo> getAppListComparator(int sort, PackageManager pm) {

@@ -27,7 +27,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.lsposed.manager.App;
 import org.lsposed.manager.ConfigManager;
-import org.lsposed.manager.adapters.ScopeAdapter;
+import org.lsposed.manager.data.model.ApplicationWithEquals;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -59,9 +59,9 @@ public class BackupUtils {
             moduleObject.put("enable", ModuleUtil.getInstance().isModuleEnabled(module.packageName, module.userId));
             moduleObject.put("package", module.packageName);
             moduleObject.put("userId", module.userId);
-            List<ScopeAdapter.ApplicationWithEquals> scope = ConfigManager.getModuleScope(module.packageName);
+            List<ApplicationWithEquals> scope = ConfigManager.getModuleScope(module.packageName);
             JSONArray scopeArray = new JSONArray();
-            for (ScopeAdapter.ApplicationWithEquals s : scope) {
+            for (ApplicationWithEquals s : scope) {
                 if (s.userId != module.userId) continue;
                 JSONObject app = new JSONObject();
                 app.put("package", s.packageName);
@@ -106,14 +106,14 @@ public class BackupUtils {
                         ModuleUtil.getInstance().setModuleEnabled(name, userId, enabled);
                         if (!enabled) continue;
                         JSONArray scopeArray = moduleObject.getJSONArray("scope");
-                        HashSet<ScopeAdapter.ApplicationWithEquals> scope = new HashSet<>(ConfigManager.getModuleScope(name));
+                        HashSet<ApplicationWithEquals> scope = new HashSet<>(ConfigManager.getModuleScope(name));
                         scope.removeIf(app -> app.userId == userId);
                         for (int j = 0; j < scopeArray.length(); j++) {
                             if (version >= 2) {
                                 JSONObject app = scopeArray.getJSONObject(j);
-                                scope.add(new ScopeAdapter.ApplicationWithEquals(app.getString("package"), app.getInt("userId")));
+                                scope.add(new ApplicationWithEquals(app.getString("package"), app.getInt("userId")));
                             } else {
-                                scope.add(new ScopeAdapter.ApplicationWithEquals(scopeArray.getString(j), 0));
+                                scope.add(new ApplicationWithEquals(scopeArray.getString(j), 0));
                             }
                         }
                         ConfigManager.setModuleScope(name, module.legacy, scope);
