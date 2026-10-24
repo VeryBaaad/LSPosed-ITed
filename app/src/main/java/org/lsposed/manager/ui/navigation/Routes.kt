@@ -30,7 +30,7 @@ object Routes {
     const val MODULE_SCOPE = "module/{packageName}/{userId}"
     const val REPO_DETAIL = "repository/{packageName}"
 
-    val topLevel = setOf(HOME, MODULES, REPOSITORY, LOGS, SETTINGS)
+    val topLevel = setOf(HOME, MODULES, REPOSITORY, SETTINGS)
 
     fun scope(packageName: String, userId: Int): String = "module/$packageName/$userId"
 

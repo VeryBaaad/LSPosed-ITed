@@ -249,7 +249,10 @@ private fun ManagerApp(
                 )
             }
             composable(Routes.LOGS) {
-                LogsScreen(viewModel = viewModel)
+                LogsScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() },
+                )
             }
             composable(Routes.SETTINGS) {
                 SettingsScreen(

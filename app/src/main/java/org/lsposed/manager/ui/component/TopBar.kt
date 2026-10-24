@@ -60,6 +60,7 @@ fun ManagerTopBar(
     )
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun DetailTopBar(
     title: String,
@@ -68,14 +69,13 @@ fun DetailTopBar(
     navigationIcon: @Composable () -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
 ) {
-    TopAppBar(
+    LargeFlexibleTopAppBar(
         title = {
             Column {
                 Text(
                     title,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.titleLarge,
                 )
                 if (!subtitle.isNullOrEmpty()) {
                     Text(

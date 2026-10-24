@@ -28,12 +28,10 @@ import androidx.compose.foundation.layout.union
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material3.Badge
@@ -66,7 +64,6 @@ private val destinations = listOf(
     BottomDestination(Routes.HOME, R.string.overview, Icons.Outlined.Home, Icons.Filled.Home),
     BottomDestination(Routes.MODULES, R.string.Modules, Icons.Outlined.Extension, Icons.Filled.Extension),
     BottomDestination(Routes.REPOSITORY, R.string.module_repo, Icons.Outlined.Storefront, Icons.Filled.Storefront),
-    BottomDestination(Routes.LOGS, R.string.Logs, Icons.Outlined.ReceiptLong, Icons.Filled.ReceiptLong),
     BottomDestination(Routes.SETTINGS, R.string.Settings, Icons.Outlined.Settings, Icons.Filled.Settings),
 )
 
@@ -101,7 +98,18 @@ fun ManagerBottomBar(
                     if (badgeCount > 0) {
                         BadgedBox(
                             badge = {
-                                Badge { Text(badgeCount.toString()) }
+                                Badge(
+                                    containerColor = if (destination.route == Routes.MODULES) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.error
+                                    },
+                                    contentColor = if (destination.route == Routes.MODULES) {
+                                        MaterialTheme.colorScheme.onPrimary
+                                    } else {
+                                        MaterialTheme.colorScheme.onError
+                                    },
+                                ) { Text(badgeCount.toString()) }
                             },
                         ) {
                             Icon(

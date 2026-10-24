@@ -41,6 +41,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -60,7 +61,6 @@ import androidx.compose.material.icons.outlined.Sort
 import androidx.compose.material.icons.outlined.StopCircle
 import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -73,7 +73,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
+import org.lsposed.manager.ui.component.material.SnackBarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Switch
@@ -111,7 +111,11 @@ import org.lsposed.manager.ui.component.ConfirmDialog
 import org.lsposed.manager.ui.component.DetailTopBar
 import org.lsposed.manager.ui.component.EmptyState
 import org.lsposed.manager.ui.component.SearchField
-import org.lsposed.manager.ui.component.SettingsGroup
+import org.lsposed.manager.ui.component.material.ExpressiveSwitch
+import org.lsposed.manager.ui.component.material.SegmentedColumn
+import org.lsposed.manager.ui.component.material.SegmentedItem
+import org.lsposed.manager.ui.component.material.SegmentedListItem
+import org.lsposed.manager.ui.component.material.StatusTagMaterial
 import org.lsposed.manager.ui.viewmodel.ManagerViewModel
 import org.lsposed.manager.util.BackupUtils
 
@@ -314,8 +318,8 @@ fun ModuleScopeScreen(
     Scaffold(
         topBar = {
             DetailTopBar(
-                title = module.title,
-                subtitle = module.packageName,
+                title = stringResource(R.string.scope_title),
+                subtitle = null,
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     IconButton(onClick = ::handleBack) {
@@ -491,7 +495,7 @@ fun ModuleScopeScreen(
                 },
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = { SnackBarHost(hostState = snackbarHostState) },
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
     ) { padding ->
@@ -505,11 +509,6 @@ fun ModuleScopeScreen(
                 enabled = enabled,
                 selectedCount = checked.size,
                 onEnabledChange = ::setEnabled,
-                onOpenSettings = {
-                    ManagerRepository.settingsIntent(module.packageName, module.userId)?.let {
-                        ManagerRepository.startActivityAsUser(it, module.userId)
-                    }
-                },
             )
 
             if (searchMode) {
@@ -561,11 +560,6 @@ fun ModuleScopeScreen(
                         label = { Text(stringResource(R.string.use_recommended_short)) },
                         leadingIcon = { Icon(Icons.Outlined.AutoAwesome, null, Modifier.size(18.dp)) },
                     )
-                    Text(
-                        stringResource(R.string.scope_selected, checked.size),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
             }
 
@@ -592,10 +586,11 @@ fun ModuleScopeScreen(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth(),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
-                    items(filteredApps, key = { it.id }) { app ->
+                    itemsIndexed(filteredApps, key = { _, app -> app.id }) { index, app ->
+                        SegmentedItem(index = index, count = filteredApps.size) {
                         ScopeAppRow(
                             app = app,
                             checked = (app.packageName to app.userId) in checked,
@@ -633,6 +628,7 @@ fun ModuleScopeScreen(
                                 }
                             },
                         )
+                        }
                     }
                 }
             }
@@ -716,74 +712,61 @@ private fun ScopeHeader(
     enabled: Boolean,
     selectedCount: Int,
     onEnabledChange: (Boolean) -> Unit,
-    onOpenSettings: () -> Unit,
 ) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        ),
-        shape = MaterialTheme.shapes.extraLarge,
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                AppIcon(module.module.packageInfo, size = 52.dp)
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(start = 14.dp),
-                ) {
-                    Text(
-                        module.title,
-                        style = MaterialTheme.typography.titleLarge,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        "${module.versionName} · ${module.packageName}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                Switch(checked = enabled, onCheckedChange = onEnabledChange)
+    Column {
+        SegmentedColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+        ) {
+            item {
+                SegmentedListItem(
+                    headlineContent = { Text(module.title) },
+                    supportingContent = {
+                        Column {
+                            Text(
+                                module.versionName,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                module.packageName,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                stringResource(R.string.scope_selected, selectedCount),
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    },
+                    leadingContent = { AppIcon(module.module.packageInfo, size = 48.dp) },
+                    trailingContent = {
+                        ExpressiveSwitch(
+                            checked = enabled,
+                            onCheckedChange = onEnabledChange,
+                        )
+                    },
+                )
             }
             if (module.description.isNotBlank()) {
-                Text(
-                    module.description,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 10.dp),
-                )
+                item {
+                    SegmentedListItem(
+                        headlineContent = {
+                            Text(
+                                module.description,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        },
+                    )
+                }
             }
-            if (module.warning != null) {
-                Text(
-                    module.warning,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
-            Row(
-                modifier = Modifier.padding(top = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    stringResource(R.string.scope_selected, selectedCount),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Spacer(Modifier.weight(1f))
-                AssistChip(
-                    onClick = onOpenSettings,
-                    label = { Text(stringResource(R.string.module_settings)) },
-                    leadingIcon = { Icon(Icons.Outlined.PlayArrow, null, Modifier.size(18.dp)) },
-                )
-            }
+        }
+        if (module.warning != null) {
+            Text(
+                module.warning,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+            )
         }
     }
 }
@@ -798,124 +781,116 @@ private fun ScopeAppRow(
 ) {
     val recommendedLabel = stringResource(R.string.requested_by_module)
     val deniedLabel = stringResource(R.string.deny_list_info)
-    val recommendations = buildList {
+    val tags = buildList {
         if (app.recommended) add(recommendedLabel)
         if (app.denied) add(deniedLabel)
     }
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled) { onCheckedChange(!checked) },
-        colors = CardDefaults.cardColors(
-            containerColor = if (checked) {
-                MaterialTheme.colorScheme.secondaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerHigh
-            },
-        ),
-        shape = MaterialTheme.shapes.large,
-    ) {
-        Row(
-            modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            AppIcon(app.packageInfo, size = 40.dp)
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(start = 12.dp, end = 4.dp),
-            ) {
-                Text(
-                    app.label.toString(),
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+    var expanded by remember { mutableStateOf(false) }
+
+    SegmentedListItem(
+        onClick = { if (enabled) onCheckedChange(!checked) },
+        enabled = enabled,
+        headlineContent = {
+            Text(
+                app.label.toString(),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+        supportingContent = {
+            Column {
                 Text(
                     if (app.packageName == "system") {
                         "system"
                     } else {
                         "${app.packageName} · ${app.packageInfo.versionName ?: ""}"
                     },
-                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (recommendations.isNotEmpty()) {
+                if (tags.isNotEmpty()) {
                     Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
                         modifier = Modifier.padding(top = 2.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        recommendations.forEach { label ->
-                            Text(
-                                label,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (label == deniedLabel) {
-                                    MaterialTheme.colorScheme.error
+                        tags.forEach { label ->
+                            StatusTagMaterial(
+                                label = label,
+                                backgroundColor = if (label == deniedLabel) {
+                                    MaterialTheme.colorScheme.errorContainer
                                 } else {
-                                    MaterialTheme.colorScheme.primary
+                                    MaterialTheme.colorScheme.primaryContainer
+                                },
+                                contentColor = if (label == deniedLabel) {
+                                    MaterialTheme.colorScheme.onErrorContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onPrimaryContainer
                                 },
                             )
                         }
                     }
                 }
             }
-            Box {
-                var expanded by remember { mutableStateOf(false) }
-                IconButton(onClick = { expanded = true }, enabled = enabled) {
-                    Icon(Icons.Outlined.MoreVert, contentDescription = null)
-                }
-                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                    val launch = ManagerRepository.launchIntent(app.packageName, app.userId)
-                    if (launch != null) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.app_launch)) },
-                            leadingIcon = { Icon(Icons.Outlined.PlayArrow, null) },
-                            onClick = {
-                                ManagerRepository.startActivityAsUser(launch, app.userId)
-                                expanded = false
-                            },
-                        )
+        },
+        leadingContent = { AppIcon(app.packageInfo, size = 40.dp) },
+        trailingContent = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(
+                    checked = checked,
+                    onCheckedChange = { if (enabled) onCheckedChange(it) },
+                    enabled = enabled,
+                )
+                Box {
+                    IconButton(onClick = { expanded = true }, enabled = enabled) {
+                        Icon(Icons.Outlined.MoreVert, contentDescription = null)
                     }
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.module_app_info)) },
-                        leadingIcon = { Icon(Icons.Outlined.Info, null) },
-                        onClick = {
-                            ManagerRepository.startActivityAsUser(
-                                ManagerRepository.appInfoIntent(app.packageName),
-                                app.userId,
+                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                        val launch = ManagerRepository.launchIntent(app.packageName, app.userId)
+                        if (launch != null) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.app_launch)) },
+                                leadingIcon = { Icon(Icons.Outlined.PlayArrow, null) },
+                                onClick = {
+                                    ManagerRepository.startActivityAsUser(launch, app.userId)
+                                    expanded = false
+                                },
                             )
-                            expanded = false
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.module_reoptimize)) },
-                        leadingIcon = { Icon(Icons.Outlined.Refresh, null) },
-                        onClick = {
-                            expanded = false
-                            onOptimize()
-                        },
-                    )
-                    if (app.packageName != "system") {
+                        }
                         DropdownMenuItem(
-                            text = { Text(stringResource(R.string.force_stop)) },
-                            leadingIcon = { Icon(Icons.Outlined.StopCircle, null) },
+                            text = { Text(stringResource(R.string.module_app_info)) },
+                            leadingIcon = { Icon(Icons.Outlined.Info, null) },
                             onClick = {
-                                ManagerRepository.forceStop(app.packageName, app.userId)
+                                ManagerRepository.startActivityAsUser(
+                                    ManagerRepository.appInfoIntent(app.packageName),
+                                    app.userId,
+                                )
                                 expanded = false
                             },
                         )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.module_reoptimize)) },
+                            leadingIcon = { Icon(Icons.Outlined.Refresh, null) },
+                            onClick = {
+                                expanded = false
+                                onOptimize()
+                            },
+                        )
+                        if (app.packageName != "system") {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.force_stop)) },
+                                leadingIcon = { Icon(Icons.Outlined.StopCircle, null) },
+                                onClick = {
+                                    ManagerRepository.forceStop(app.packageName, app.userId)
+                                    expanded = false
+                                },
+                            )
+                        }
                     }
                 }
             }
-            Checkbox(
-                checked = checked,
-                onCheckedChange = onCheckedChange,
-                enabled = enabled,
-            )
-        }
-    }
+        },
+    )
 }
 
 @Composable

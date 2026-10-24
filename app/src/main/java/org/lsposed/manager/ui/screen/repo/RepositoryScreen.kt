@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -39,15 +40,14 @@ import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Sort
 import androidx.compose.material.icons.outlined.Storefront
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
+import org.lsposed.manager.ui.component.material.SnackBarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
@@ -61,10 +61,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
@@ -74,7 +75,8 @@ import org.lsposed.manager.data.repository.SettingsRepository
 import org.lsposed.manager.ui.component.EmptyState
 import org.lsposed.manager.ui.component.ManagerTopBar
 import org.lsposed.manager.ui.component.SearchField
-import org.lsposed.manager.ui.component.StatusTag
+import org.lsposed.manager.ui.component.material.StatusTagMaterial
+import org.lsposed.manager.ui.component.material.TonalCard
 import org.lsposed.manager.ui.util.formatDate
 import org.lsposed.manager.ui.viewmodel.ManagerViewModel
 
@@ -86,7 +88,6 @@ fun RepositoryScreen(viewModel: ManagerViewModel, onOpenModule: (String) -> Unit
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val snackbarHostState = remember { SnackbarHostState() }
-    var searchMode by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     var sortMenu by remember { mutableStateOf(false) }
     var refreshing by remember { mutableStateOf(false) }
@@ -111,9 +112,6 @@ fun RepositoryScreen(viewModel: ManagerViewModel, onOpenModule: (String) -> Unit
                 title = stringResource(R.string.module_repo),
                 scrollBehavior = scrollBehavior,
                 actions = {
-                    IconButton(onClick = { searchMode = !searchMode; if (!searchMode) query = "" }) {
-                        Icon(Icons.Outlined.Search, contentDescription = stringResource(R.string.repo_search_hint))
-                    }
                     Box {
                         IconButton(onClick = { sortMenu = true }) {
                             Icon(Icons.Outlined.Sort, contentDescription = stringResource(R.string.sort))
@@ -154,7 +152,7 @@ fun RepositoryScreen(viewModel: ManagerViewModel, onOpenModule: (String) -> Unit
                 },
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = { SnackBarHost(hostState = snackbarHostState) },
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { padding ->
@@ -164,14 +162,12 @@ fun RepositoryScreen(viewModel: ManagerViewModel, onOpenModule: (String) -> Unit
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .fillMaxSize(),
         ) {
-            if (searchMode) {
-                SearchField(
-                    value = query,
-                    onValueChange = { query = it },
-                    placeholder = stringResource(R.string.repo_search_hint),
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                )
-            }
+            SearchField(
+                value = query,
+                onValueChange = { query = it },
+                placeholder = stringResource(R.string.repo_search_hint),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
 
             PullToRefreshBox(
                 isRefreshing = refreshing,
@@ -220,83 +216,85 @@ fun RepositoryScreen(viewModel: ManagerViewModel, onOpenModule: (String) -> Unit
 
 @Composable
 private fun RepoModuleCard(item: RepoItem, onClick: () -> Unit) {
-    Card(
-        onClick = onClick,
+    TonalCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        ),
-        shape = MaterialTheme.shapes.large,
+        onClick = onClick,
     ) {
-        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.Top) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(MaterialTheme.colorScheme.secondaryContainer),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    Icons.Outlined.Extension,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier.size(26.dp),
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, top = 14.dp, end = 16.dp, bottom = 10.dp),
+        ) {
+            Text(
+                text = item.title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = "ID: ${item.packageName}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (!item.summary.isNullOrBlank()) {
+                Text(
+                    text = item.summary,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 8.dp),
                 )
             }
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(start = 14.dp),
+
+            val update = item.upgradableVersion
+            if (update != null || item.installed) {
+                Row(
+                    modifier = Modifier.padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    if (update != null) {
+                        StatusTagMaterial(
+                            label = stringResource(R.string.update_available, update),
+                            backgroundColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                    } else {
+                        StatusTagMaterial(
+                            label = stringResource(R.string.installed),
+                            backgroundColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                    }
+                }
+            }
+
+            HorizontalDivider(
+                modifier = Modifier.padding(top = 8.dp),
+                thickness = Dp.Hairline,
+            )
+            Row(
+                modifier = Modifier.padding(top = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    item.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    item.packageName,
-                    style = MaterialTheme.typography.labelSmall,
+                    text = item.module.latestRelease ?: "",
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (!item.summary.isNullOrBlank()) {
+                Spacer(Modifier.weight(1f))
+                val date = formatDate(item.updatedAt)
+                if (date != null) {
                     Text(
-                        item.summary,
+                        text = stringResource(R.string.module_repo_updated_time, date),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 4.dp),
                     )
-                }
-                Row(
-                    modifier = Modifier.padding(top = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    val update = item.upgradableVersion
-                    when {
-                        update != null -> StatusTag(
-                            label = stringResource(R.string.update_available, update),
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
-                        item.installed -> StatusTag(
-                            label = stringResource(R.string.installed),
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                        )
-                    }
-                    val date = formatDate(item.updatedAt)
-                    if (date != null) {
-                        Text(
-                            stringResource(R.string.module_repo_updated_time, date),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(start = 10.dp),
-                        )
-                    }
                 }
             }
         }

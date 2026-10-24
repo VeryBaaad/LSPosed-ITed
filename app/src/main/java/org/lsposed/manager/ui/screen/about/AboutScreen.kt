@@ -37,6 +37,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Groups
@@ -46,12 +47,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -60,12 +64,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.lsposed.manager.BuildConfig
 import org.lsposed.manager.R
 import org.lsposed.manager.ui.component.AppIcon
+import org.lsposed.manager.ui.component.material.SegmentedColumn
+import org.lsposed.manager.ui.component.material.SegmentedListItem
 import org.lsposed.manager.ui.component.DetailTopBar
-import org.lsposed.manager.ui.component.GroupItemDivider
-import org.lsposed.manager.ui.component.SettingNavigationRow
-import org.lsposed.manager.ui.component.SettingRow
-import org.lsposed.manager.ui.component.SettingsGroup
-import org.lsposed.manager.ui.component.SettingsHeader
 import org.lsposed.manager.ui.util.openUrl
 import org.lsposed.manager.ui.viewmodel.ManagerViewModel
 
@@ -76,6 +77,7 @@ fun AboutScreen(viewModel: ManagerViewModel, onBack: () -> Unit) {
     val packageInfo = remember {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0) }.getOrNull()
     }
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val translators = stringResource(R.string.translators).let {
         runCatching { Html.fromHtml(it, Html.FROM_HTML_MODE_LEGACY).toString() }.getOrDefault(it)
     }
@@ -84,7 +86,8 @@ fun AboutScreen(viewModel: ManagerViewModel, onBack: () -> Unit) {
         topBar = {
             DetailTopBar(
                 title = stringResource(R.string.About),
-                subtitle = stringResource(R.string.app_name),
+                subtitle = null,
+                scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
@@ -98,6 +101,7 @@ fun AboutScreen(viewModel: ManagerViewModel, onBack: () -> Unit) {
         Column(
             modifier = Modifier
                 .padding(padding)
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(bottom = 24.dp),
@@ -140,44 +144,56 @@ fun AboutScreen(viewModel: ManagerViewModel, onBack: () -> Unit) {
                 )
             }
 
-            SettingsHeader(stringResource(R.string.about_source), modifier = Modifier.padding(horizontal = 16.dp))
-            SettingsGroup(modifier = Modifier.padding(horizontal = 16.dp)) {
-                SettingNavigationRow(
-                    title = stringResource(R.string.about_source),
-                    summary = "github.com/LSPosed/LSPosed",
-                    icon = Icons.Outlined.Code,
-                    onClick = { context.openUrl("https://github.com/LSPosed/LSPosed") },
-                )
-                GroupItemDivider()
-                SettingNavigationRow(
-                    title = stringResource(R.string.about_telegram),
-                    summary = "@LSPosed",
-                    icon = Icons.Outlined.Chat,
-                    onClick = { context.openUrl("https://t.me/LSPosed") },
-                )
-                GroupItemDivider()
-                SettingNavigationRow(
-                    title = stringResource(R.string.about_report_issue),
-                    summary = stringResource(R.string.report_issue),
-                    icon = Icons.Outlined.BugReport,
-                    onClick = {
-                        context.openUrl("https://github.com/LSPosed/LSPosed/issues/new/choose")
-                    },
-                )
-                GroupItemDivider()
-                SettingNavigationRow(
-                    title = stringResource(R.string.about_translations),
-                    summary = "crowdin.com/project/lsposed",
-                    icon = Icons.Outlined.Language,
-                    onClick = { context.openUrl("https://lsposed.crowdin.com/lsposed") },
-                )
-                if (translators != "null" && translators.isNotBlank()) {
-                    GroupItemDivider()
-                    SettingRow(
-                        title = stringResource(R.string.settings_translation_contributors),
-                        summary = translators,
-                        icon = Icons.Outlined.Groups,
+            SegmentedColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                title = stringResource(R.string.about_source),
+            ) {
+                item {
+                    SegmentedListItem(
+                        onClick = { context.openUrl("https://github.com/LSPosed/LSPosed") },
+                        headlineContent = { Text(stringResource(R.string.about_source)) },
+                        supportingContent = { Text("github.com/LSPosed/LSPosed") },
+                        leadingContent = { Icon(Icons.Outlined.Code, null) },
+                        trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null) },
                     )
+                }
+                item {
+                    SegmentedListItem(
+                        onClick = { context.openUrl("https://t.me/LSPosed") },
+                        headlineContent = { Text(stringResource(R.string.about_telegram)) },
+                        supportingContent = { Text("@LSPosed") },
+                        leadingContent = { Icon(Icons.Outlined.Chat, null) },
+                        trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null) },
+                    )
+                }
+                item {
+                    SegmentedListItem(
+                        onClick = { context.openUrl("https://github.com/LSPosed/LSPosed/issues/new/choose") },
+                        headlineContent = { Text(stringResource(R.string.about_report_issue)) },
+                        supportingContent = { Text(stringResource(R.string.report_issue)) },
+                        leadingContent = { Icon(Icons.Outlined.BugReport, null) },
+                        trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null) },
+                    )
+                }
+                item {
+                    SegmentedListItem(
+                        onClick = { context.openUrl("https://lsposed.crowdin.com/lsposed") },
+                        headlineContent = { Text(stringResource(R.string.about_translations)) },
+                        supportingContent = { Text("crowdin.com/project/lsposed") },
+                        leadingContent = { Icon(Icons.Outlined.Language, null) },
+                        trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null) },
+                    )
+                }
+                if (translators != "null" && translators.isNotBlank()) {
+                    item {
+                        SegmentedListItem(
+                            headlineContent = { Text(stringResource(R.string.settings_translation_contributors)) },
+                            supportingContent = { Text(translators) },
+                            leadingContent = { Icon(Icons.Outlined.Groups, null) },
+                        )
+                    }
                 }
             }
 

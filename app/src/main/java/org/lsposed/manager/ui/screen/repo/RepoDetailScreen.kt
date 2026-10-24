@@ -42,18 +42,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Tab
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -65,6 +62,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -80,9 +78,11 @@ import kotlinx.coroutines.delay
 import org.lsposed.manager.ui.component.DetailTopBar
 import org.lsposed.manager.ui.component.EmptyState
 import org.lsposed.manager.ui.component.HtmlContent
-import org.lsposed.manager.ui.component.SettingRow
-import org.lsposed.manager.ui.component.SettingsGroup
-import org.lsposed.manager.ui.component.StatusTag
+import org.lsposed.manager.ui.component.material.ExpressiveTabRow
+import org.lsposed.manager.ui.component.material.SegmentedColumn
+import org.lsposed.manager.ui.component.material.SegmentedListItem
+import org.lsposed.manager.ui.component.material.StatusTagMaterial
+import org.lsposed.manager.ui.component.material.TonalCard
 import org.lsposed.manager.ui.util.formatBytes
 import org.lsposed.manager.ui.util.formatDateTime
 import org.lsposed.manager.ui.util.openUrl
@@ -103,6 +103,7 @@ fun RepoDetailScreen(
     var tab by remember { mutableIntStateOf(0) }
     var assets by remember { mutableStateOf<List<ReleaseAsset>?>(null) }
     var loadingMore by remember { mutableStateOf(false) }
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
     LaunchedEffect(module?.releasesLoaded) {
         if (module?.releasesLoaded == true) loadingMore = false
@@ -157,8 +158,9 @@ fun RepoDetailScreen(
     Scaffold(
         topBar = {
             DetailTopBar(
-                title = title,
-                subtitle = packageName,
+                title = stringResource(R.string.module_repo),
+                subtitle = null,
+                scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
@@ -182,6 +184,7 @@ fun RepoDetailScreen(
         Column(
             modifier = Modifier
                 .padding(padding)
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .fillMaxSize(),
         ) {
             RepoHeader(
@@ -189,23 +192,15 @@ fun RepoDetailScreen(
                 update = update,
                 installed = item?.installed == true,
             )
-            PrimaryTabRow(selectedTabIndex = tab) {
-                Tab(
-                    selected = tab == 0,
-                    onClick = { tab = 0 },
-                    text = { Text(stringResource(R.string.module_readme)) },
-                )
-                Tab(
-                    selected = tab == 1,
-                    onClick = { tab = 1 },
-                    text = { Text(stringResource(R.string.module_releases)) },
-                )
-                Tab(
-                    selected = tab == 2,
-                    onClick = { tab = 2 },
-                    text = { Text(stringResource(R.string.module_information)) },
-                )
-            }
+            ExpressiveTabRow(
+                selectedTabIndex = tab,
+                tabs = listOf(
+                    stringResource(R.string.module_readme),
+                    stringResource(R.string.module_releases),
+                    stringResource(R.string.module_information),
+                ),
+                onTabClick = { tab = it },
+            )
 
             Box(
                 modifier = Modifier
@@ -285,53 +280,38 @@ fun RepoDetailScreen(
 
 @Composable
 private fun RepoHeader(module: OnlineModule, update: String?, installed: Boolean) {
-    Card(
+    TonalCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        ),
-        shape = MaterialTheme.shapes.extraLarge,
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(start = 16.dp, top = 14.dp, end = 16.dp, bottom = 10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Outlined.Extension,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(32.dp),
-                )
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(start = 12.dp),
-                ) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         module.description ?: module.name ?: "",
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        module.name ?: "",
+                        "ID: ${module.name ?: ""}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 when {
-                    update != null -> StatusTag(
+                    update != null -> StatusTagMaterial(
                         label = stringResource(R.string.update_available, update),
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        backgroundColor = MaterialTheme.colorScheme.primaryContainer,
                         contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
-                    installed -> {
-                        Icon(
-                            Icons.Outlined.CheckCircle,
-                            contentDescription = stringResource(R.string.installed),
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                    }
+                    installed -> StatusTagMaterial(
+                        label = stringResource(R.string.installed),
+                        backgroundColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
                 }
             }
             module.summary?.takeIf { it.isNotBlank() }?.let { summary ->
@@ -339,7 +319,7 @@ private fun RepoHeader(module: OnlineModule, update: String?, installed: Boolean
                     summary,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 12.dp),
+                    modifier = Modifier.padding(top = 8.dp),
                 )
             }
         }
@@ -352,14 +332,10 @@ private fun ReleaseCard(
     onOpen: () -> Unit,
     onAssets: () -> Unit,
 ) {
-    Card(
+    TonalCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        ),
-        shape = MaterialTheme.shapes.large,
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(start = 16.dp, top = 14.dp, end = 16.dp, bottom = 10.dp)) {
             Text(
                 release.name ?: release.tagName ?: "",
                 style = MaterialTheme.typography.titleMedium,
@@ -411,39 +387,47 @@ private fun RepoInformation(module: OnlineModule) {
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
-        SettingsGroup(modifier = Modifier.padding(0.dp)) {
+        SegmentedColumn(modifier = Modifier.fillMaxWidth()) {
             if (!module.homepageUrl.isNullOrBlank()) {
-                SettingRow(
-                    title = stringResource(R.string.module_information_homepage),
-                    summary = module.homepageUrl,
-                    onClick = { module.homepageUrl?.let(context::openUrl) },
-                )
+                item {
+                    SegmentedListItem(
+                        onClick = { module.homepageUrl?.let(context::openUrl) },
+                        headlineContent = { Text(stringResource(R.string.module_information_homepage)) },
+                        supportingContent = { Text(module.homepageUrl!!) },
+                    )
+                }
             }
             if (!module.sourceUrl.isNullOrBlank()) {
-                SettingRow(
-                    title = stringResource(R.string.module_information_source_url),
-                    summary = module.sourceUrl,
-                    onClick = { module.sourceUrl?.let(context::openUrl) },
-                )
+                item {
+                    SegmentedListItem(
+                        onClick = { module.sourceUrl?.let(context::openUrl) },
+                        headlineContent = { Text(stringResource(R.string.module_information_source_url)) },
+                        supportingContent = { Text(module.sourceUrl!!) },
+                    )
+                }
             }
             val collaborators = module.collaborators.orEmpty()
             if (collaborators.isNotEmpty()) {
-                SettingRow(
-                    title = stringResource(R.string.module_information_collaborators),
-                    summary = collaborators.joinToString(", ") { it.login ?: it.name ?: "" },
-                    onClick = {
-                        collaborators.firstOrNull()?.login?.let { context.openUrl("https://github.com/$it") }
-                    },
-                )
+                item {
+                    SegmentedListItem(
+                        onClick = {
+                            collaborators.firstOrNull()?.login?.let { context.openUrl("https://github.com/$it") }
+                        },
+                        headlineContent = { Text(stringResource(R.string.module_information_collaborators)) },
+                        supportingContent = { Text(collaborators.joinToString(", ") { it.login ?: it.name ?: "" }) },
+                    )
+                }
             }
             val release = module.latestRelease
             if (!release.isNullOrBlank()) {
-                SettingRow(
-                    title = stringResource(R.string.module_releases),
-                    summary = release,
-                )
+                item {
+                    SegmentedListItem(
+                        headlineContent = { Text(stringResource(R.string.module_releases)) },
+                        supportingContent = { Text(release) },
+                    )
+                }
             }
         }
     }

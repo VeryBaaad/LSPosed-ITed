@@ -26,6 +26,9 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -35,6 +38,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.MoreVert
@@ -46,11 +50,11 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
+import org.lsposed.manager.ui.component.material.SnackBarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -62,6 +66,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -78,14 +83,15 @@ import org.lsposed.manager.data.repository.SettingsRepository
 import org.lsposed.manager.receivers.LSPManagerServiceHolder
 import org.lsposed.manager.ui.component.ConfirmDialog
 import org.lsposed.manager.ui.component.EmptyState
-import org.lsposed.manager.ui.component.ManagerTopBar
+import org.lsposed.manager.ui.component.DetailTopBar
+import org.lsposed.manager.ui.component.material.ExpressiveTabRow
 import org.lsposed.manager.ui.viewmodel.ManagerViewModel
 import java.io.BufferedReader
 import java.io.FileInputStream
 import java.io.InputStreamReader
 
 @Composable
-fun LogsScreen(viewModel: ManagerViewModel) {
+fun LogsScreen(viewModel: ManagerViewModel, onBack: () -> Unit) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -99,6 +105,7 @@ fun LogsScreen(viewModel: ManagerViewModel) {
     var menu by remember { mutableStateOf(false) }
 
     val verbose = tab == 1
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
     fun showMessage(message: String) {
         scope.launch { snackbarHostState.showSnackbar(message) }
@@ -140,8 +147,15 @@ fun LogsScreen(viewModel: ManagerViewModel) {
 
     Scaffold(
         topBar = {
-            ManagerTopBar(
+            DetailTopBar(
                 title = stringResource(R.string.Logs),
+                subtitle = null,
+                scrollBehavior = scrollBehavior,
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                    }
+                },
                 actions = {
                     IconButton(onClick = { reloadKey++ }) {
                         Icon(Icons.Outlined.Refresh, contentDescription = stringResource(R.string.refresh))
@@ -191,27 +205,24 @@ fun LogsScreen(viewModel: ManagerViewModel) {
                 },
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = { SnackBarHost(hostState = snackbarHostState) },
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
     ) { padding ->
         Column(
             modifier = Modifier
                 .padding(padding)
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .fillMaxSize(),
         ) {
-            PrimaryTabRow(selectedTabIndex = tab) {
-                Tab(
-                    selected = tab == 0,
-                    onClick = { tab = 0 },
-                    text = { Text(stringResource(R.string.logs_modules)) },
-                )
-                Tab(
-                    selected = tab == 1,
-                    onClick = { tab = 1 },
-                    text = { Text(stringResource(R.string.logs_verbose)) },
-                )
-            }
+            ExpressiveTabRow(
+                selectedTabIndex = tab,
+                tabs = listOf(
+                    stringResource(R.string.logs_modules),
+                    stringResource(R.string.logs_verbose),
+                ),
+                onTabClick = { tab = it },
+            )
 
             when {
                 loading -> {
