@@ -437,6 +437,8 @@ public class ConfigFileManager {
         if (apkFile.getEntry("META-INF/xposed/java_init.list") == null) return null;
         var properties = readModuleProperties(apkFile);
         if (properties == null) return null;
+        int minApiVersion = readApiVersion(properties, "minApiVersion");
+        if (minApiVersion > LSPModuleService.XPOSED_API_VERSION) return null;
         return properties;
     }
 
@@ -466,11 +468,21 @@ public class ConfigFileManager {
         try (var apkFile = new ZipFile(toGlobalNamespace(path))) {
             readDexes(apkFile, preLoadedDexes, obfuscate);
             var properties = readModuleProperties(apkFile);
-            if (properties != null && readApiVersion(properties, "targetApiVersion") >= 100) {
+            var targetApiVersion = properties == null ? 0 : readApiVersion(properties, "targetApiVersion");
+            if (properties != null
+                    && readApiVersion(properties, "minApiVersion") > LSPModuleService.XPOSED_API_VERSION) {
+                Log.w(TAG, "Module " + path + " requires a newer Xposed API, skip!");
+                preLoadedDexes.forEach(SharedMemory::close);
+                return null;
+            }
+            file.targetApiVersion = targetApiVersion;
+            file.autoHotReload = properties != null
+                    && Boolean.parseBoolean(properties.getProperty("autoHotReload", "").trim());
+            if (properties != null && targetApiVersion >= 100) {
                 file.legacy = false;
                 readName(apkFile, "META-INF/xposed/java_init.list", moduleClassNames);
                 readName(apkFile, "META-INF/xposed/native_init.list", moduleLibraryNames);
-                if (readApiVersion(properties, "targetApiVersion") > 100) {
+                if (targetApiVersion > 100) {
                     file.exceptionPassthrough = isExceptionPassthrough(properties);
                 }
             } else {

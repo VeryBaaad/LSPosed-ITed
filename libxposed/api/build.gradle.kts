@@ -23,6 +23,6 @@ android {
 
 dependencies {
     compileOnly(libs.androidx.annotation)
-    api(libs.libxposed.annotation)
+    compileOnly(libs.libxposed.annotation)
     lintPublish(libs.libxposed.lint)
 }

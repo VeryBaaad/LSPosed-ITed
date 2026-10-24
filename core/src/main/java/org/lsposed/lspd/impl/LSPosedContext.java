@@ -58,172 +58,55 @@ public class LSPosedContext implements XposedInterface {
     public static String appDir;
     public static String processName;
 
-    static final Set<XposedModule> modules = ConcurrentHashMap.newKeySet();
-
     private final String mPackageName;
     private final ApplicationInfo mApplicationInfo;
     private final ILSPInjectedModuleService service;
     private final ExceptionMode mDefaultExceptionMode;
+    private final int mTargetApiVersion;
     private final Map<String, SharedPreferences> mRemotePrefs = new ConcurrentHashMap<>();
-    private static int targetApiVersion = 101;
 
-    LSPosedContext(String packageName, ApplicationInfo applicationInfo, ILSPInjectedModuleService service) {
-        this.mPackageName = packageName;
-        this.mApplicationInfo = applicationInfo;
-        this.service = service;
-        this.mDefaultExceptionMode = ExceptionMode.DEFAULT;
-        targetApiVersion = 100;
-    }
-    LSPosedContext(String packageName, ApplicationInfo applicationInfo, ILSPInjectedModuleService service,
-                   ExceptionMode defaultExceptionMode, int ApiVersion) {
+    private volatile boolean frozen = false;
+
+    LSPosedContext(String packageName, ApplicationInfo applicationInfo,
+                   ILSPInjectedModuleService service, ExceptionMode defaultExceptionMode,
+                   int targetApiVersion) {
         this.mPackageName = packageName;
         this.mApplicationInfo = applicationInfo;
         this.service = service;
         this.mDefaultExceptionMode = defaultExceptionMode;
-        targetApiVersion = ApiVersion;
+        this.mTargetApiVersion = targetApiVersion;
     }
 
-    private static boolean isOutdatedModern(int targetApi) {
-        return targetApi <= 100;
+    void freeze() {
+        frozen = true;
+    }
+
+    void unfreeze() {
+        frozen = false;
+    }
+
+    boolean isFrozen() {
+        return frozen;
+    }
+
+    String getPackageName() {
+        return mPackageName;
     }
 
     public static void callOnPackageLoaded(XposedModuleInterface.PackageLoadedParam param) {
-        for (XposedModule module : modules) {
-            try {
-                module.onPackageLoaded(param);
-            } catch (Throwable t) {
-                Log.e(TAG, "Error when calling onPackageLoaded of " + module.getModuleApplicationInfo().packageName, t);
-            }
-        }
+        LSPosedModuleManager.callOnPackageLoaded(param);
     }
 
     public static void callOnPackageReady(XposedModuleInterface.PackageReadyParam param) {
-        if (!isOutdatedModern(targetApiVersion)) {
-            for (XposedModule module : modules) {
-                try {
-                    module.onPackageReady(param);
-                } catch (Throwable t) {
-                    Log.e(TAG, "Error when calling onPackageReady of " + module.getModuleApplicationInfo().packageName, t);
-                }
-            }
-        }
+        LSPosedModuleManager.callOnPackageReady(param);
     }
 
     public static void callOnSystemServerLoaded(XposedModuleInterface.SystemServerLoadedParam param) {
-        for (XposedModule module : modules) {
-            try {
-                module.onSystemServerLoaded(param);
-            } catch (Throwable t) {
-                Log.e(TAG, "Error when calling onSystemServerStarting of " + module.getModuleApplicationInfo().packageName, t);
-            }
-        }
+        LSPosedModuleManager.callOnSystemServerLoaded(param);
     }
 
     public static void callOnSystemServerStarting(XposedModuleInterface.SystemServerStartingParam param) {
-        for (XposedModule module : modules) {
-            try {
-                module.onSystemServerStarting(param);
-            } catch (Throwable t) {
-                Log.e(TAG, "Error when calling onSystemServerStarting of " + module.getModuleApplicationInfo().packageName, t);
-            }
-        }
-    }
-
-    @SuppressLint("DiscouragedPrivateApi")
-    public static boolean loadModule(ActivityThread at, Module module) {
-        try {
-            Log.d(TAG, "Loading module " + module.packageName);
-            var sb = new StringBuilder();
-            var abis = Process.is64Bit() ? Build.SUPPORTED_64_BIT_ABIS : Build.SUPPORTED_32_BIT_ABIS;
-            for (String abi : abis) {
-                sb.append(module.apkPath).append("!/lib/").append(abi).append(File.pathSeparator);
-            }
-            var librarySearchPath = sb.toString();
-            var initLoader = XposedModule.class.getClassLoader();
-            try {
-                ZipFile zipFile = new ZipFile(module.apkPath);
-                ZipEntry propEntry = zipFile.getEntry("META-INF/xposed/module.prop");
-                if (propEntry == null) {
-                    Log.e(TAG, "Error on load base of " + module.apkPath + " because prop entry is null");
-                }
-                Properties prop = new Properties();
-                try (InputStream in = zipFile.getInputStream(propEntry)) {
-                    prop.load(in);
-                }
-                targetApiVersion = extractIntPart(prop.getProperty("targetApiVersion"));
-                zipFile.close();
-            } catch (Throwable e) {
-                Log.e(TAG, "Error on load base of " + module.apkPath, e);
-            }
-            var mcl = LspModuleClassLoader.loadApk(module.apkPath, module.file.preLoadedDexes, librarySearchPath, initLoader, targetApiVersion >= XposedInterface.API_102);
-            if (mcl.loadClass(XposedModule.class.getName()).getClassLoader() != initLoader) {
-                Log.e(TAG, "  Cannot load module: " + module.packageName);
-                Log.e(TAG, "  The Xposed API classes are compiled into the module's APK.");
-                Log.e(TAG, "  This may cause strange issues and must be fixed by the module developer.");
-                return false;
-            }
-            LSPosedContext ctx;
-            ExceptionMode defaultExceptionMode;
-            if (isOutdatedModern(targetApiVersion)) {
-                ctx = new LSPosedContext(module.packageName, module.applicationInfo, module.service);
-            } else {
-                module.file.moduleLibraryNames.forEach(NativeAPI::recordNativeEntrypoint);
-                defaultExceptionMode = module.file.exceptionPassthrough ? ExceptionMode.PASSTHROUGH : ExceptionMode.PROTECTIVE;
-                ctx = new LSPosedContext(module.packageName, module.applicationInfo, module.service, defaultExceptionMode, targetApiVersion);
-            }
-            for (var entry : module.file.moduleClassNames) {
-                var moduleClass = mcl.loadClass(entry);
-                Log.d(TAG, "  Loading class " + moduleClass);
-                if (!XposedModule.class.isAssignableFrom(moduleClass)) {
-                    Log.e(TAG, "    This class doesn't implement any sub-interface of XposedModule, skipping it");
-                    continue;
-                }
-                XposedModule moduleContext;
-                try {
-                    if (isOutdatedModern(targetApiVersion)) {
-                        var moduleEntry = moduleClass.getConstructor(XposedInterface.class, XposedModuleInterface.ModuleLoadedParam.class);
-                        moduleContext = (XposedModule) moduleEntry.newInstance(ctx, new XposedModuleInterface.ModuleLoadedParam() {
-                            @Override
-                            public boolean isSystemServer() {
-                                return isSystemServer;
-                            }
-
-                            @NonNull
-                            @Override
-                            public String getProcessName() {
-                                return processName;
-                            }
-                        });
-                    } else {
-                        moduleContext = (XposedModule) moduleClass.getConstructor().newInstance();
-                        moduleContext.attachFramework(ctx);
-                        moduleContext.onModuleLoaded(new XposedModuleInterface.ModuleLoadedParam() {
-                            @Override
-                            public boolean isSystemServer() {
-                                return isSystemServer;
-                            }
-
-                            @NonNull
-                            @Override
-                            public String getProcessName() {
-                                return processName;
-                            }
-                        });
-                    }
-                    modules.add(moduleContext);
-                } catch (Throwable e) {
-                    Log.e(TAG, "    Failed to load class " + moduleClass, e);
-                }
-            }
-            if (isOutdatedModern(targetApiVersion)) {
-                module.file.moduleLibraryNames.forEach(NativeAPI::recordNativeEntrypoint);
-            }
-            Log.d(TAG, "Loaded module " + module.packageName + ": " + ctx);
-        } catch (Throwable e) {
-            Log.d(TAG, "Loading module " + module.packageName, e);
-            return false;
-        }
-        return true;
+        LSPosedModuleManager.callOnSystemServerStarting(param);
     }
 
     @NonNull
@@ -372,13 +255,15 @@ public class LSPosedContext implements XposedInterface {
     @Override
     @NonNull
     public HookBuilder hook(@NonNull Executable origin) {
-        return LSPosedBridge.newHookBuilder(this, origin, mDefaultExceptionMode);
+        return LSPosedBridge.newHookBuilder(this, origin, mPackageName, this::isFrozen,
+                mDefaultExceptionMode);
     }
 
     @Override
     @NonNull
     public HookBuilder hookClassInitializer(@NonNull Class<?> origin) {
-        return LSPosedBridge.newClassInitializerHookBuilder(this, origin, mDefaultExceptionMode);
+        return LSPosedBridge.newClassInitializerHookBuilder(this, origin, mPackageName,
+                this::isFrozen, mDefaultExceptionMode);
     }
 
     @Override

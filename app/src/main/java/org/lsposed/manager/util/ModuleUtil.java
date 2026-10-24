@@ -57,7 +57,7 @@ import java.util.zip.ZipFile;
 public final class ModuleUtil {
     // xposedminversion below this
     public static int MIN_MODULE_VERSION = 2; // reject modules with
-    public static final int MIN_OUTDATED_MODERN_MODULE_API = 100;
+    public static final int MIN_MODERN_MODULE_API = 100;
     private static ModuleUtil instance = null;
     private final PackageManager pm;
     private final Set<ModuleListener> listeners = ConcurrentHashMap.newKeySet();
@@ -113,15 +113,6 @@ public final class ModuleUtil {
         return extractIntPart(prop.getProperty("targetApiVersion"));
     }
 
-    private static boolean isOutdatedModernModule(ZipFile zip) throws IOException {
-        int apiVersion = ConfigManager.getXposedApiVersion();
-        int targetApiVersion = getTargetApiVersion(zip);
-        return zip.getEntry("META-INF/xposed/java_init.list") != null
-                && apiVersion > 0
-                && targetApiVersion >= MIN_OUTDATED_MODERN_MODULE_API
-                && targetApiVersion < apiVersion;
-    }
-
     public static ZipFile getModernModuleApk(ApplicationInfo info) {
         String[] apks;
         if (info.splitSourceDirs != null) {
@@ -132,31 +123,8 @@ public final class ModuleUtil {
         for (var apk : apks) {
             try {
                 zip = new ZipFile(apk);
-                int apiVersion = ConfigManager.getXposedApiVersion();
                 if (zip.getEntry("META-INF/xposed/java_init.list") != null
-                        && apiVersion > 0
-                        && getTargetApiVersion(zip) >= apiVersion) {
-                    return zip;
-                }
-                zip.close();
-                zip = null;
-            } catch (IOException ignored) {
-            }
-        }
-        return zip;
-    }
-
-    public static ZipFile getOutdatedModernModuleApk(ApplicationInfo info) {
-        String[] apks;
-        if (info.splitSourceDirs != null) {
-            apks = Arrays.copyOf(info.splitSourceDirs, info.splitSourceDirs.length + 1);
-            apks[info.splitSourceDirs.length] = info.sourceDir;
-        } else apks = new String[]{info.sourceDir};
-        ZipFile zip = null;
-        for (var apk : apks) {
-            try {
-                zip = new ZipFile(apk);
-                if (isOutdatedModernModule(zip)) {
+                        && getTargetApiVersion(zip) >= MIN_MODERN_MODULE_API) {
                     return zip;
                 }
                 zip.close();
@@ -179,28 +147,41 @@ public final class ModuleUtil {
         }
 
         Map<Pair<String, Integer>, InstalledModule> modules = new HashMap<>();
-        var users = ConfigManager.getUsers();
-        for (PackageInfo pkg : ConfigManager.getInstalledPackagesFromAllUsers(PackageManager.GET_META_DATA | MATCH_ALL_FLAGS, false)) {
-            ApplicationInfo app = pkg.applicationInfo;
-
-            var modernApk = getModernModuleApk(app);
-            var legacy = isLegacyModule(app);
-            var outdatedModernApk = modernApk == null && !legacy ? getOutdatedModernModuleApk(app) : null;
-            if (modernApk != null || legacy || outdatedModernApk != null) {
-                modules.computeIfAbsent(Pair.create(pkg.packageName, app.uid / App.PER_USER_RANGE),
-                        k -> new InstalledModule(pkg, modernApk != null ? modernApk : outdatedModernApk));
+        List<UserInfo> users = new ArrayList<>();
+        try {
+            users = ConfigManager.getUsers();
+            for (PackageInfo pkg : ConfigManager.getInstalledPackagesFromAllUsers(PackageManager.GET_META_DATA | MATCH_ALL_FLAGS, false)) {
+                ApplicationInfo app = pkg.applicationInfo;
+                if (app == null) {
+                    continue;
+                }
+                try {
+                    var modernApk = getModernModuleApk(app);
+                    var legacy = isLegacyModule(app);
+                    if (modernApk != null || legacy) {
+                        modules.computeIfAbsent(Pair.create(pkg.packageName, app.uid / App.PER_USER_RANGE),
+                                k -> new InstalledModule(pkg, modernApk));
+                    }
+                } catch (Throwable t) {
+                    Log.e(App.TAG, "Cannot classify module " + pkg.packageName, t);
+                }
             }
+        } catch (Throwable t) {
+            Log.e(App.TAG, "Cannot reload installed modules", t);
+        } finally {
+            installedModules = modules;
+            this.users = users;
+            try {
+                enabledModules = ConfigManager.getEnabledModules().stream()
+                        .map(module -> Pair.create(module.packageName, module.userId))
+                        .collect(Collectors.toCollection(HashSet::new));
+            } catch (Throwable t) {
+                Log.e(App.TAG, "Cannot reload enabled modules", t);
+            }
+            // Always, or the UI has no way to leave its loading state.
+            modulesLoaded = true;
+            listeners.forEach(ModuleListener::onModulesReloaded);
         }
-
-        installedModules = modules;
-
-        this.users = users;
-
-        enabledModules = ConfigManager.getEnabledModules().stream()
-                .map(module -> Pair.create(module.packageName, module.userId))
-                .collect(Collectors.toCollection(HashSet::new));
-        modulesLoaded = true;
-        listeners.forEach(ModuleListener::onModulesReloaded);
     }
 
     @Nullable
@@ -228,11 +209,18 @@ public final class ModuleUtil {
         }
 
         ApplicationInfo app = pkg.applicationInfo;
-        var modernApk = getModernModuleApk(app);
-        var legacy = isLegacyModule(app);
-        var outdatedModernApk = modernApk == null && !legacy ? getOutdatedModernModuleApk(app) : null;
-        if (modernApk != null || legacy || outdatedModernApk != null) {
-            InstalledModule module = new InstalledModule(pkg, modernApk != null ? modernApk : outdatedModernApk);
+        if (app == null) return null;
+        final ZipFile modernApk;
+        final boolean legacy;
+        try {
+            modernApk = getModernModuleApk(app);
+            legacy = isLegacyModule(app);
+        } catch (Throwable t) {
+            Log.e(App.TAG, "Cannot classify module " + packageName, t);
+            return null;
+        }
+        if (modernApk != null || legacy) {
+            InstalledModule module = new InstalledModule(pkg, modernApk);
             installedModules.put(Pair.create(packageName, userId), module);
             listeners.forEach(i -> i.onSingleModuleReloaded(module));
             return module;

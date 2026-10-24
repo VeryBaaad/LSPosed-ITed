@@ -1,7 +1,7 @@
-package org.lsposed.lspd;
+package org.lsposed.lspd.service;
 
 import org.lsposed.lspd.models.HotReloadOutcome;
 
-interface IHotReloadReceiver {
+interface IHotReloadOutcomeReceiver {
     oneway void onOutcome(in HotReloadOutcome outcome) = 1;
 }

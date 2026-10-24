@@ -31,23 +31,27 @@ import android.util.ArrayMap;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import org.lsposed.daemon.BuildConfig;
+import org.lsposed.lspd.models.HotReloadOutcome;
 import org.lsposed.lspd.models.Module;
 
-import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import io.github.libxposed.api.XposedInterface;
+import io.github.libxposed.service.HookedProcess;
+import io.github.libxposed.service.IHotReloadCallback;
 import io.github.libxposed.service.IXposedScopeCallback;
 import io.github.libxposed.service.IXposedService;
 
@@ -55,12 +59,15 @@ public class LSPModuleService extends IXposedService.Stub {
 
     private final static String TAG = "LSPosedModuleService";
 
-    private final ExecutorService hotReloadExecutor = Executors.newCachedThreadPool(r -> new Thread(r, "LSPHotReload"));
+    private final static ExecutorService hotReloadExecutor =
+            Executors.newCachedThreadPool(r -> new Thread(r, "LSPosedHotReload"));
     private final static Set<Integer> uidSet = ConcurrentHashMap.newKeySet();
     private final static Set<ModuleBinderKey> sentBinderSet = ConcurrentHashMap.newKeySet();
     private final static Set<ModuleBinderKey> sendingBinderSet = ConcurrentHashMap.newKeySet();
-    private final static Map<Module, LSPModuleService> serviceMap = Collections.synchronizedMap(new WeakHashMap<>());
+    private final static Map<String, LSPModuleService> serviceMap = new ConcurrentHashMap<>();
     private final static ExecutorService binderExecutor = Executors.newSingleThreadExecutor(r -> new Thread(r, "module-binder-delivery"));
+
+    private final static long RELOAD_TIMEOUT_SECONDS = 30L;
 
     static final int XPOSED_API_VERSION = XposedInterface.LIB_API;
 
@@ -69,9 +76,18 @@ public class LSPModuleService extends IXposedService.Stub {
     private final @NonNull
     Module loadedModule;
 
-    public LSPModuleService(@NonNull Module loadedModule) {
+    private LSPModuleService(@NonNull Module loadedModule) {
         this.loadedModule = loadedModule;
     }
+
+    private static LSPModuleService serviceOf(Module module) {
+        return serviceMap.computeIfAbsent(module.packageName, pkg -> new LSPModuleService(module));
+    }
+
+    static void forget(String packageName) {
+        serviceMap.remove(packageName);
+    }
+
     static void uidClear() {
         uidSet.clear();
         sentBinderSet.clear();
@@ -91,10 +107,18 @@ public class LSPModuleService extends IXposedService.Stub {
     }
 
     static void autoHotReload(Module module) {
-        if (!module?.file?.autoHotReload == false) return;
-        serviceMap.computeIfAbsent(module, m -> new LSPModuleService(module));
-        LSPApplicationService
+        if (module.file == null || !module.file.autoHotReload) return;
+        var appService = ServiceManager.getApplicationService();
+        if (appService == null) return;
+        var service = serviceOf(module);
+        for (var target : appService.staleHotReloadTargets(module.packageName)) {
+            if (!target.hotReloadable) continue;
+            if (!appService.beginHotReload(target)) continue;
+            Log.d(TAG, "Auto hot reloading " + module.packageName + " in " + target.processName);
+            hotReloadExecutor.execute(() -> service.runHotReload(target, null, null));
+        }
     }
+
     static void sendBindersForRunningModules() {
         for (int uid : uidSet) {
             sendBinderForUid(uid);
@@ -126,10 +150,7 @@ public class LSPModuleService extends IXposedService.Stub {
             return;
         }
         try {
-            LSPModuleService service;
-            synchronized (serviceMap) {
-                service = serviceMap.computeIfAbsent(module, LSPModuleService::new);
-            }
+            var service = serviceOf(module);
             binderExecutor.execute(() -> service.sendBinder(uid, key));
         } catch (Throwable e) {
             sendingBinderSet.remove(key);
@@ -173,7 +194,7 @@ public class LSPModuleService extends IXposedService.Stub {
                 return;
             }
             var extra = new Bundle();
-            extra.putBinder("binder", asBinder());
+            extra.putBinder("binder", binderForModule());
             Bundle reply = null;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 reply = provider.call(new AttributionSource.Builder(1000).setPackageName("android").build(), authority, SEND_BINDER, null, extra);
@@ -219,11 +240,32 @@ public class LSPModuleService extends IXposedService.Stub {
         }
     }
 
-    LSPModuleService(@NonNull Module module) {
-        loadedModule = module;
+    private android.os.Binder binderForModule() {
+        var module = ConfigManager.getInstance().getCachedModule(loadedModule.packageName);
+        var file = module != null ? module.file : loadedModule.file;
+        if (file == null || file.targetApiVersion != 100) return this;
+        var binder = legacy100;
+        if (binder == null) {
+            synchronized (this) {
+                if (legacy100 == null) legacy100 = new LSPModuleServiceLegacy100(this);
+                binder = legacy100;
+            }
+        }
+        return binder;
     }
 
-    private int ensureModule() throws RemoteException {
+    private volatile LSPModuleServiceLegacy100 legacy100 = null;
+
+    int ensureCaller() throws RemoteException {
+        return ensureModule();
+    }
+
+    @NonNull
+    String modulePackageName() {
+        return loadedModule.packageName;
+    }
+
+    int ensureModule() throws RemoteException {
         var appId = Binder.getCallingUid() % PER_USER_RANGE;
         if (loadedModule.appId != appId) {
             throw new RemoteException("Module " + loadedModule.packageName + " is not for uid " + Binder.getCallingUid());
@@ -267,14 +309,16 @@ public class LSPModuleService extends IXposedService.Stub {
 
     @Override
     public List<String> getScope() throws RemoteException {
-        ensureModule();
-        ArrayList<String> res = new ArrayList<>();
+        var userId = ensureModule();
         var scope = ConfigManager.getInstance().getModuleScope(loadedModule.packageName);
-        if (scope == null) return res;
-        for (var s : scope) {
-            res.add(s.packageName);
+        if (scope == null) return new ArrayList<>();
+        var result = new ArrayList<String>();
+        for (var application : scope) {
+            if (application.userId != userId && !application.packageName.equals("system")) continue;
+            if (result.contains(application.packageName)) continue;
+            result.add(application.packageName);
         }
-        return res;
+        return result;
     }
 
     @Override
@@ -304,6 +348,143 @@ public class LSPModuleService extends IXposedService.Stub {
             }
         } catch (Throwable e) {
             throw new RemoteException(e.getMessage());
+        }
+    }
+
+    @Override
+    public List<HookedProcess> getRunningTargets() throws RemoteException {
+        var userId = ensureModule();
+        return ServiceManager.getApplicationService().getHotReloadTargets(loadedModule.packageName, userId);
+    }
+
+    @Override
+    public void hotReloadModule(long targetId, Bundle data, IHotReloadCallback callback) throws RemoteException {
+        var userId = ensureModule();
+        var appService = ServiceManager.getApplicationService();
+        var target = appService.getHotReloadTarget(targetId, loadedModule.packageName, userId);
+        if (target == null) {
+            throw new SecurityException("Target " + targetId + " is not a target of " + loadedModule.packageName);
+        }
+
+        if (!target.hotReloadable) {
+            report(callback, IXposedService.HOT_RELOAD_UNSUPPORTED,
+                    "Module has no single Java entry class");
+            return;
+        }
+
+        if (!appService.beginHotReload(target)) {
+            report(callback, IXposedService.HOT_RELOAD_IN_PROGRESS, "A reload is already running");
+            return;
+        }
+
+        hotReloadExecutor.execute(() -> runHotReload(target, data, callback));
+    }
+
+    private void runHotReload(LSPApplicationService.HotReloadTarget target, Bundle data,
+                              IHotReloadCallback callback) {
+        var appService = ServiceManager.getApplicationService();
+        var status = IXposedService.HOT_RELOAD_FAILED;
+        String message = "Hot reload did not run";
+        Runnable refreeze = null;
+        var loadedVersion = 0L;
+        var answered = new CountDownLatch(1);
+        var outcome = new AtomicReference<HotReloadOutcome>();
+
+        try {
+            var binder = appService.getHotReloadBinder(target);
+            if (binder == null) {
+                status = IXposedService.HOT_RELOAD_UNSUPPORTED;
+                message = "Process " + target.processName + " has no hot reload entry point";
+                return;
+            }
+            var newModule = ConfigManager.getInstance().getCachedModule(loadedModule.packageName);
+            if (newModule == null) {
+                status = IXposedService.HOT_RELOAD_UNSUPPORTED;
+                message = "No installed generation of " + loadedModule.packageName + " to load";
+                return;
+            }
+            if (newModule.file == null || newModule.file.targetApiVersion < 102) {
+                status = IXposedService.HOT_RELOAD_UNSUPPORTED;
+                message = "The installed generation of " + loadedModule.packageName
+                        + " does not target API 102 or higher";
+                return;
+            }
+
+            refreeze = ProcessFreezer.thaw(target.pid);
+            if (ProcessFreezer.isFrozen(target.pid)) {
+                status = IXposedService.HOT_RELOAD_FAILED;
+                message = "Process " + target.processName + " is frozen and could not be thawed";
+                return;
+            }
+
+            var receiver = new IHotReloadOutcomeReceiver.Stub() {
+                @Override
+                public void onOutcome(HotReloadOutcome result) {
+                    outcome.set(result);
+                    answered.countDown();
+                }
+            };
+            binder.hotReload(loadedModule.packageName, data, newModule, receiver);
+
+            if (!answered.await(RELOAD_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                var gone = !appService.isProcessRegistered(target);
+                status = gone
+                        ? IXposedService.HOT_RELOAD_PROCESS_DIED
+                        : IXposedService.HOT_RELOAD_FAILED;
+                message = gone
+                        ? "Process " + target.processName + " died during hot reload"
+                        : "Process " + target.processName + " did not answer within " + RELOAD_TIMEOUT_SECONDS + "s";
+                return;
+            }
+
+            var answer = outcome.get();
+            if (answer == null) {
+                status = IXposedService.HOT_RELOAD_FAILED;
+                message = "Process " + target.processName + " answered with nothing";
+                return;
+            }
+
+            status = answer.status;
+            if (answer.generationChanged) loadedVersion = newModule.versionCode;
+            if (answer.message != null) {
+                message = answer.message;
+            } else if (status == IXposedService.HOT_RELOAD_FAILED && !answer.refused) {
+                message = "Hot reload failed without a diagnostic message";
+            } else {
+                message = null;
+            }
+        } catch (Throwable t) {
+            var gone = !appService.isProcessRegistered(target);
+            status = gone
+                    ? IXposedService.HOT_RELOAD_PROCESS_DIED
+                    : IXposedService.HOT_RELOAD_FAILED;
+            message = gone
+                    ? "Process " + target.processName + " died during hot reload"
+                    : t.getClass().getName() + ": " + (t.getMessage() == null ? "no message" : t.getMessage());
+            Log.e(TAG, "Hot reload of " + loadedModule.packageName + " failed", t);
+        } finally {
+            if (refreeze != null) refreeze.run();
+            appService.endHotReload(target, stateFor(status), loadedVersion);
+            report(callback, status, message);
+        }
+    }
+
+    private static int stateFor(int status) {
+        if (status == IXposedService.HOT_RELOAD_SUCCEEDED) {
+            return HookedProcess.TARGET_STATE_UP_TO_DATE;
+        }
+        if (status == IXposedService.HOT_RELOAD_FAILED) {
+            return HookedProcess.TARGET_STATE_FAILED;
+        }
+        return HookedProcess.TARGET_STATE_UP_TO_DATE;
+    }
+
+    private void report(@Nullable IHotReloadCallback callback, int status, @Nullable String message) {
+        if (callback == null) return;
+        try {
+            callback.onHotReloadResult(status, message);
+        } catch (Throwable t) {
+            Log.w(TAG, "Cannot deliver hot reload result to " + loadedModule.packageName, t);
         }
     }
 
@@ -356,7 +537,7 @@ public class LSPModuleService extends IXposedService.Stub {
             var dir = ConfigFileManager.resolveModuleDir(loadedModule.packageName, FILES_DIR, userId, Binder.getCallingUid());
             var files = dir.toFile().list();
             return files == null ? new String[0] : files;
-        } catch (IOException e) {
+        } catch (java.io.IOException e) {
             throw new RemoteException(e.getMessage());
         }
     }
@@ -368,7 +549,7 @@ public class LSPModuleService extends IXposedService.Stub {
         try {
             var dir = ConfigFileManager.resolveModuleDir(loadedModule.packageName, FILES_DIR, userId, Binder.getCallingUid());
             return ParcelFileDescriptor.open(dir.resolve(path).toFile(), ParcelFileDescriptor.MODE_CREATE | ParcelFileDescriptor.MODE_READ_WRITE);
-        } catch (IOException e) {
+        } catch (java.io.IOException e) {
             throw new RemoteException(e.getMessage());
         }
     }
@@ -380,7 +561,7 @@ public class LSPModuleService extends IXposedService.Stub {
         try {
             var dir = ConfigFileManager.resolveModuleDir(loadedModule.packageName, FILES_DIR, userId, Binder.getCallingUid());
             return dir.resolve(path).toFile().delete();
-        } catch (IOException e) {
+        } catch (java.io.IOException e) {
             throw new RemoteException(e.getMessage());
         }
     }

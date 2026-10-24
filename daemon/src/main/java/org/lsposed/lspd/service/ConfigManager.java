@@ -241,9 +241,12 @@ public class ConfigManager {
                     modules.add(cached);
                     continue;
                 }
-                var statPath = toGlobalNamespace("/data/user_de/0/" + module.packageName).getAbsolutePath();
+                var statPath = resolveModuleDataDir(module.packageName);
+                if (statPath == null) {
+                    statPath = toGlobalNamespace("/data/user_de/0/" + module.packageName).getAbsolutePath();
+                }
                 try {
-                    module.appId = Os.stat(statPath).st_uid;
+                    module.appId = Os.stat(statPath).st_uid % PER_USER_RANGE;
                 } catch (ErrnoException e) {
                     Log.w(TAG, "cannot stat " + statPath, e);
                     module.appId = -1;
@@ -721,6 +724,14 @@ public class ConfigManager {
                     } else {
                         // cache from system server, update application info
                         oldModule.applicationInfo = moduleInfo.applicationInfo;
+                        // -1 is what getModulesForSystemServer leaves behind when it could not
+                        // stat the module's data directory before the package manager existed.
+                        // This is the first point at which the real answer is available, so both
+                        // halves of it are filled in - the appId as well as the ApplicationInfo.
+                        oldModule.appId = moduleInfo.appId % PER_USER_RANGE;
+                    }
+                    if (oldModule.versionCode == 0) {
+                        oldModule.versionCode = versionCodeOf(moduleInfo.packageInfo);
                     }
                     return false;
                 }
@@ -728,7 +739,8 @@ public class ConfigManager {
                     m.apkPath = moduleInfo.apkPath;
                     obsoletePaths.put(m.packageName, m.apkPath);
                 }
-                m.appId = moduleInfo.appId;
+                m.appId = moduleInfo.appId % PER_USER_RANGE;
+                m.versionCode = versionCodeOf(moduleInfo.packageInfo);
                 m.applicationInfo = moduleInfo.applicationInfo;
                 m.service = oldModule != null ? oldModule.service : new LSPInjectedModuleService(m.packageName);
                 return true;
@@ -759,6 +771,13 @@ public class ConfigManager {
         cacheScopes();
         LSPModuleService.sendBindersForRunningModules();
         toClose.forEach(SharedMemory::close);
+
+        var appService = ServiceManager.getApplicationService();
+        if (appService != null) {
+            appService.retainHotReloadTargets(cachedModule.keySet());
+            appService.backfillLoadedVersions();
+            cachedModule.values().forEach(LSPModuleService::autoHotReload);
+        }
     }
 
     private synchronized void cacheScopes() {
@@ -779,6 +798,7 @@ public class ConfigManager {
             final var obsoleteModules = new HashSet<Application>();
             final var moduleAvailability = new HashMap<Pair<String, Integer>, Boolean>();
             final var cachedProcessScope = new HashMap<Pair<String, Integer>, List<ProcessScope>>();
+            final var moduleHolders = new HashMap<String, Set<Integer>>();
 
             final var denylist = new HashSet<>(getDenyListPackages());
             while (cursor.moveToNext()) {
@@ -826,11 +846,11 @@ public class ConfigManager {
                     for (ProcessScope processScope : processesScope) {
                         cachedScope.computeIfAbsent(processScope,
                                 ignored -> new LinkedList<>()).add(module);
-                        // Always allow the module to inject itself
                         if (modulePackageName.equals(app.packageName)) {
                             var appId = processScope.uid % PER_USER_RANGE;
-                            for (var user : UserService.getUsers()) {
-                                var moduleUid = user.id * PER_USER_RANGE + appId;
+                            var holders = moduleHolders.computeIfAbsent(modulePackageName, ConfigManager::installedUsersOf);
+                            for (var holder : holders) {
+                                var moduleUid = holder * PER_USER_RANGE + appId;
                                 if (moduleUid == processScope.uid) continue; // skip duplicate
                                 var moduleSelf = new ProcessScope(processScope.processName, moduleUid);
                                 cachedScope.computeIfAbsent(moduleSelf,
@@ -838,7 +858,7 @@ public class ConfigManager {
                             }
                         }
                     }
-                } catch (RemoteException e) {
+                } catch (Throwable e) {
                     Log.e(TAG, Log.getStackTraceString(e));
                 }
             }
@@ -942,17 +962,20 @@ public class ConfigManager {
         return count > 0;
     }
 
+    private static int storedScopeUserId(String scopePackageName, int userId) {
+        return "system".equals(scopePackageName) ? 0 : userId;
+    }
+
     public boolean setModuleScope(String packageName, List<Application> scopes) throws RemoteException {
         if (scopes == null) return false;
         if (!ensureModuleApkPath(packageName, -1)) return false;
         executeInTransaction(() -> {
             db.delete("scope", "module_pkg_name = ?", new String[]{packageName});
             for (Application app : scopes) {
-                if (app.packageName.equals("system") && app.userId != 0) continue;
                 ContentValues values = new ContentValues();
                 values.put("module_pkg_name", packageName);
                 values.put("app_pkg_name", app.packageName);
-                values.put("user_id", app.userId);
+                values.put("user_id", storedScopeUserId(app.packageName, app.userId));
                 db.insertWithOnConflict("scope", null, values, SQLiteDatabase.CONFLICT_IGNORE);
             }
         });
@@ -963,12 +986,11 @@ public class ConfigManager {
 
     public boolean setModuleScope(String packageName, String scopePackageName, int userId) {
         if (scopePackageName == null) return false;
-        if (scopePackageName.equals("system") && userId != 0) return false;
         executeInTransaction(() -> {
             ContentValues values = new ContentValues();
             values.put("module_pkg_name", packageName);
             values.put("app_pkg_name", scopePackageName);
-            values.put("user_id", userId);
+            values.put("user_id", storedScopeUserId(scopePackageName, userId));
             db.insertWithOnConflict("scope", null, values, SQLiteDatabase.CONFLICT_IGNORE);
         });
         // Called by xposed service, should be async
@@ -978,9 +1000,8 @@ public class ConfigManager {
 
     public boolean removeModuleScope(String packageName, String scopePackageName, int userId) {
         if (scopePackageName == null) return false;
-        if (scopePackageName.equals("system") && userId != 0) return false;
         executeInTransaction(() -> {
-            db.delete("scope", "module_pkg_name = ? AND app_pkg_name = ? AND user_id = ?", new String[]{packageName, scopePackageName, String.valueOf(userId)});
+            db.delete("scope", "module_pkg_name = ? AND app_pkg_name = ? AND user_id = ?", new String[]{packageName, scopePackageName, String.valueOf(storedScopeUserId(scopePackageName, userId))});
         });
         // Called by xposed service, should be async
         updateCaches(false);
@@ -989,10 +1010,9 @@ public class ConfigManager {
 
     public boolean removeModuleScope(String packageName, List<String> scopePackageNames, int userId) {
         if (scopePackageNames == null) return false;
-        if (scopePackageNames.contains("system") && userId != 0) return false;
         executeInTransaction(() -> {
             for (var scopePackageName : scopePackageNames) {
-                db.delete("scope", "module_pkg_name = ? AND app_pkg_name = ? AND user_id = ?", new String[]{packageName, scopePackageName, String.valueOf(userId)});
+                db.delete("scope", "module_pkg_name = ? AND app_pkg_name = ? AND user_id = ?", new String[]{packageName, scopePackageName, String.valueOf(storedScopeUserId(scopePackageName, userId))});
             }
         });
         // Called by xposed service, should be async
@@ -1037,6 +1057,9 @@ public class ConfigManager {
         if (packageName.equals("lspd")) return false;
         boolean res = executeInTransaction(() -> db.delete("modules", "module_pkg_name = ?", new String[]{packageName}) > 0);
         removeBlockedScopeRequest(packageName);
+        LSPModuleService.forget(packageName);
+        var appService = ServiceManager.getApplicationService();
+        if (appService != null) appService.forgetHotReloadTargets(packageName);
         try {
             for (var user : UserService.getUsers()) {
                 removeModulePrefs(user.id, packageName);
@@ -1255,6 +1278,58 @@ public class ConfigManager {
             if (module.appId == uid % PER_USER_RANGE) return module;
         }
         return null;
+    }
+
+    @Nullable
+    public Module getCachedModule(String packageName) {
+        return cachedModule.get(packageName);
+    }
+
+    public long getModuleVersion(String packageName) {
+        var module = cachedModule.get(packageName);
+        return module == null ? 0L : module.versionCode;
+    }
+
+    private static long versionCodeOf(@Nullable PackageInfo packageInfo) {
+        if (packageInfo == null) return 0L;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            return packageInfo.getLongVersionCode();
+        }
+        return packageInfo.versionCode;
+    }
+
+    private static Set<Integer> installedUsersOf(String packageName) {
+        var result = new HashSet<Integer>();
+        try {
+            for (var user : UserService.getUsers()) {
+                if (PackageService.isPackageAvailable(packageName, user.id, true)) {
+                    result.add(user.id);
+                }
+            }
+        } catch (Throwable e) {
+            Log.w(TAG, "cannot resolve the users holding " + packageName, e);
+        }
+        return result;
+    }
+
+    @Nullable
+    private static String resolveModuleDataDir(String packageName) {
+        var userDirs = toGlobalNamespace("/data/user_de").listFiles();
+        if (userDirs == null) return null;
+        return java.util.Arrays.stream(userDirs)
+                .filter(File::isDirectory)
+                .sorted(java.util.Comparator.comparingInt(dir -> {
+                    try {
+                        return Integer.parseInt(dir.getName());
+                    } catch (NumberFormatException e) {
+                        return Integer.MAX_VALUE;
+                    }
+                }))
+                .map(dir -> new File(dir, packageName))
+                .filter(File::exists)
+                .map(File::getAbsolutePath)
+                .findFirst()
+                .orElse(null);
     }
 
     private void walkFileTree(Path rootDir, Consumer<Path> action) throws IOException {

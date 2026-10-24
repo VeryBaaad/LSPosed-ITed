@@ -271,10 +271,6 @@ public class LSPosedService extends ILSPosedService.Stub {
             switch (action) {
                 case "approve" -> {
                     var approved = new ArrayList<String>();
-                    if (validScopePackageNames.contains("system") && userId != 0) {
-                        iCallback.onScopeRequestFailed("Invalid request");
-                        return;
-                    }
                     for (var scopePackageName : validScopePackageNames) {
                         if (ConfigManager.getInstance().setModuleScope(packageName, scopePackageName, userId)) {
                             approved.add(scopePackageName);
