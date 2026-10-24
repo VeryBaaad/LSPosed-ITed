@@ -21,6 +21,8 @@ package org.lsposed.manager.data.repository
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import com.materialkolor.PaletteStyle
+import com.materialkolor.dynamiccolor.ColorSpec
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -84,6 +86,8 @@ data class SettingsState(
     val listSort: Int = 0,
     val repoSort: Int = 0,
     val upgradableFirst: Boolean = true,
+    val paletteStyle: PaletteStyle = PaletteStyle.TonalSpot,
+    val colorSpec: ColorSpec.SpecVersion = ColorSpec.SpecVersion.SPEC_2025,
 )
 
 /**
@@ -120,6 +124,14 @@ object SettingsRepository {
             listSort = p.getInt("list_sort", 0),
             repoSort = p.getInt("repo_sort", 0),
             upgradableFirst = p.getBoolean("upgradable_first", true),
+            paletteStyle = runCatching {
+                PaletteStyle.valueOf(p.getString("color_style", PaletteStyle.TonalSpot.name)!!)
+            }.getOrDefault(PaletteStyle.TonalSpot),
+            colorSpec = runCatching {
+                ColorSpec.SpecVersion.valueOf(
+                    p.getString("color_spec", ColorSpec.SpecVersion.SPEC_2025.name)!!
+                )
+            }.getOrDefault(ColorSpec.SpecVersion.SPEC_2025),
         )
     }
 
@@ -209,6 +221,16 @@ object SettingsRepository {
     fun setUpgradableFirst(enabled: Boolean) {
         prefs.edit().putBoolean("upgradable_first", enabled).apply()
         edit { it.copy(upgradableFirst = enabled) }
+    }
+
+    fun setPaletteStyle(style: PaletteStyle) {
+        prefs.edit().putString("color_style", style.name).apply()
+        edit { it.copy(paletteStyle = style) }
+    }
+
+    fun setColorSpec(spec: ColorSpec.SpecVersion) {
+        prefs.edit().putString("color_spec", spec.name).apply()
+        edit { it.copy(colorSpec = spec) }
     }
 }
 

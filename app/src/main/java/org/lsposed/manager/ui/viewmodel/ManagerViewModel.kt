@@ -204,8 +204,6 @@ class ManagerViewModel(application: Application) : AndroidViewModel(application)
             val items = modules?.mapNotNull { module ->
                 val name = module.name ?: return@mapNotNull null
                 if (module.isHide == true) return@mapNotNull null
-                val releases = repo.releases(name)
-                if (releases != null && releases.isEmpty()) return@mapNotNull null
                 val installedModule = installedModules?.values?.firstOrNull { it.packageName == name }
                 val latest = repo.latestVersion(name)
                 val upgradable = if (installedModule != null &&

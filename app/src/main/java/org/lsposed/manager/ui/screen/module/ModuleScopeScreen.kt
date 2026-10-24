@@ -59,7 +59,7 @@ import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Sort
 import androidx.compose.material.icons.outlined.StopCircle
-import androidx.compose.material.icons.outlined.Storefront
+import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -443,7 +443,7 @@ fun ModuleScopeScreen(
                             if (ManagerRepository.onlineModule(module.packageName) != null) {
                                 DropdownMenuItem(
                                     text = { Text(stringResource(R.string.view_in_repo)) },
-                                    leadingIcon = { Icon(Icons.Outlined.Storefront, null) },
+                                    leadingIcon = { Icon(Icons.Outlined.CloudDownload, null) },
                                     onClick = {
                                         onOpenRepo(module.packageName)
                                         moreMenu = false

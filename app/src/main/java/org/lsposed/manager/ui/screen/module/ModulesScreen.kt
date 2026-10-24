@@ -52,7 +52,7 @@ import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Sort
 import androidx.compose.material.icons.outlined.StopCircle
-import androidx.compose.material.icons.outlined.Storefront
+import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.AlertDialog
@@ -108,7 +108,6 @@ import org.lsposed.manager.data.repository.ManagerRepository
 import org.lsposed.manager.data.repository.SettingsRepository
 import org.lsposed.manager.ui.component.AppIcon
 import org.lsposed.manager.ui.component.ConfirmDialog
-import org.lsposed.manager.ui.component.EmptyState
 import org.lsposed.manager.ui.component.ManagerTopBar
 import org.lsposed.manager.ui.component.SearchField
 import org.lsposed.manager.ui.component.SingleChoiceDialog
@@ -126,7 +125,6 @@ fun ModulesScreen(
     val context = LocalContext.current
     val modules by viewModel.modules.collectAsStateWithLifecycle()
     val users by viewModel.users.collectAsStateWithLifecycle()
-    val modulesLoaded by viewModel.modulesLoaded.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val framework by viewModel.framework.collectAsStateWithLifecycle()
 
@@ -180,52 +178,54 @@ fun ModulesScreen(
                 title = stringResource(R.string.Modules),
                 scrollBehavior = scrollBehavior,
                 actions = {
-                    Box {
-                        IconButton(onClick = { sortMenu = true }) {
-                            Icon(Icons.Outlined.Sort, contentDescription = stringResource(R.string.sort))
+                    if (framework.binderAlive) {
+                        Box {
+                            IconButton(onClick = { sortMenu = true }) {
+                                Icon(Icons.Outlined.Sort, contentDescription = stringResource(R.string.sort))
+                            }
+                            DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
+                                SortMenuItem(
+                                    selected = settings.listSort % 2 == 0 && settings.listSort <= 1,
+                                    text = stringResource(R.string.sort_by_name),
+                                ) {
+                                    SettingsRepository.setListSort(0)
+                                    sortMenu = false
+                                }
+                                SortMenuItem(
+                                    selected = settings.listSort in 2..3,
+                                    text = stringResource(R.string.sort_by_package),
+                                ) {
+                                    SettingsRepository.setListSort(2)
+                                    sortMenu = false
+                                }
+                                SortMenuItem(
+                                    selected = settings.listSort in 4..5,
+                                    text = stringResource(R.string.sort_by_install),
+                                ) {
+                                    SettingsRepository.setListSort(4)
+                                    sortMenu = false
+                                }
+                                SortMenuItem(
+                                    selected = settings.listSort in 6..7,
+                                    text = stringResource(R.string.sort_by_update),
+                                ) {
+                                    SettingsRepository.setListSort(6)
+                                    sortMenu = false
+                                }
+                                SortMenuItem(
+                                    selected = settings.listSort % 2 == 1,
+                                    text = stringResource(R.string.sort_reverse),
+                                ) {
+                                    val next = if (settings.listSort % 2 == 0) settings.listSort + 1 else settings.listSort - 1
+                                    SettingsRepository.setListSort(next)
+                                    sortMenu = false
+                                }
+                            }
                         }
-                        DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
-                            SortMenuItem(
-                                selected = settings.listSort % 2 == 0 && settings.listSort <= 1,
-                                text = stringResource(R.string.sort_by_name),
-                            ) {
-                                SettingsRepository.setListSort(0)
-                                sortMenu = false
+                        if (users.size > 1) {
+                            IconButton(onClick = { showUserPicker = true }) {
+                                Icon(Icons.Outlined.PersonAdd, contentDescription = stringResource(R.string.install_to_user, ""))
                             }
-                            SortMenuItem(
-                                selected = settings.listSort in 2..3,
-                                text = stringResource(R.string.sort_by_package),
-                            ) {
-                                SettingsRepository.setListSort(2)
-                                sortMenu = false
-                            }
-                            SortMenuItem(
-                                selected = settings.listSort in 4..5,
-                                text = stringResource(R.string.sort_by_install),
-                            ) {
-                                SettingsRepository.setListSort(4)
-                                sortMenu = false
-                            }
-                            SortMenuItem(
-                                selected = settings.listSort in 6..7,
-                                text = stringResource(R.string.sort_by_update),
-                            ) {
-                                SettingsRepository.setListSort(6)
-                                sortMenu = false
-                            }
-                            SortMenuItem(
-                                selected = settings.listSort % 2 == 1,
-                                text = stringResource(R.string.sort_reverse),
-                            ) {
-                                val next = if (settings.listSort % 2 == 0) settings.listSort + 1 else settings.listSort - 1
-                                SettingsRepository.setListSort(next)
-                                sortMenu = false
-                            }
-                        }
-                    }
-                    if (users.size > 1) {
-                        IconButton(onClick = { showUserPicker = true }) {
-                            Icon(Icons.Outlined.PersonAdd, contentDescription = stringResource(R.string.install_to_user, ""))
                         }
                     }
                 },
@@ -241,60 +241,43 @@ fun ModulesScreen(
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .fillMaxSize(),
         ) {
-            SearchField(
-                value = query,
-                onValueChange = { query = it },
-                placeholder = stringResource(R.string.module_search_hint),
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            )
+            if (framework.binderAlive) {
+                SearchField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = stringResource(R.string.module_search_hint),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
 
-            if (users.size > 1) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    users.forEach { user ->
-                        FilterChip(
-                            selected = selectedUserId == user.id,
-                            onClick = { selectedUserId = user.id },
-                            label = { Text(user.name) },
-                        )
-                    }
-                }
-            }
-
-            PullToRefreshBox(
-                isRefreshing = refreshing,
-                onRefresh = {
-                    refreshing = true
-                    viewModel.refreshModules(force = true)
-                },
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-            ) {
-                when {
-                    !modulesLoaded && filtered.isEmpty() && framework.binderAlive -> {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator()
+                if (users.size > 1) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        users.forEach { user ->
+                            FilterChip(
+                                selected = selectedUserId == user.id,
+                                onClick = { selectedUserId = user.id },
+                                label = { Text(user.name) },
+                            )
                         }
                     }
-                    filtered.isEmpty() && modulesLoaded -> {
-                        EmptyState(
-                            icon = Icons.Outlined.Extension,
-                            title = stringResource(R.string.no_modules),
-                            summary = if (!framework.binderAlive) {
-                                stringResource(R.string.not_installed_summary)
-                            } else {
-                                stringResource(R.string.no_modules_summary)
-                            },
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    }
-                    else -> {
+                }
+
+                PullToRefreshBox(
+                    isRefreshing = refreshing,
+                    onRefresh = {
+                        refreshing = true
+                        viewModel.refreshModules(force = true)
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                ) {
+                    if (filtered.isNotEmpty()) {
                         LazyColumn(
                             modifier = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
@@ -326,6 +309,8 @@ fun ModulesScreen(
                                 )
                             }
                         }
+                    } else {
+                        Box(modifier = Modifier.fillMaxSize())
                     }
                 }
             }
@@ -602,7 +587,7 @@ private fun ModuleCard(
                         if (hasRepo) {
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.view_in_repo)) },
-                                leadingIcon = { Icon(Icons.Outlined.Storefront, null) },
+                                leadingIcon = { Icon(Icons.Outlined.CloudDownload, null) },
                                 onClick = {
                                     onOpenRepo(module.packageName)
                                     menu = false

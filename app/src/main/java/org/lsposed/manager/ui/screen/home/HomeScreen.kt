@@ -22,7 +22,6 @@ package org.lsposed.manager.ui.screen.home
 import android.os.Build
 import android.text.Html
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -35,27 +34,19 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Android
-import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Build
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.DeveloperBoard
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Extension
+import androidx.compose.material.icons.outlined.Tag
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.DeveloperBoard
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Memory
-import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.ReceiptLong
-import androidx.compose.material.icons.outlined.RestartAlt
 import androidx.compose.material.icons.outlined.Security
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Smartphone
-import androidx.compose.material.icons.outlined.Storefront
-import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material.icons.outlined.Warning
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -63,10 +54,8 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import org.lsposed.manager.ui.component.material.SnackBarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.contentColorFor
 import androidx.compose.material3.rememberTopAppBarState
@@ -74,7 +63,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -82,26 +70,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.launch
 import org.lsposed.lspd.ILSPManagerService
-import org.lsposed.manager.BuildConfig
 import org.lsposed.manager.R
 import org.lsposed.manager.data.model.FrameworkInfo
 import org.lsposed.manager.data.repository.ManagerRepository
-import org.lsposed.manager.ui.component.ConfirmDialog
 import org.lsposed.manager.ui.component.ManagerTopBar
 import org.lsposed.manager.ui.component.material.SegmentedColumn
 import org.lsposed.manager.ui.component.material.SegmentedListItem
 import org.lsposed.manager.ui.component.material.StatusTagMaterial
 import org.lsposed.manager.ui.component.material.TonalCard
 import org.lsposed.manager.ui.navigation.Routes
-import org.lsposed.manager.ui.util.copyToClipboard
 import org.lsposed.manager.ui.util.openUrl
 import org.lsposed.manager.ui.viewmodel.ManagerViewModel
 import org.lsposed.manager.util.UpdateUtil
@@ -114,15 +97,8 @@ fun HomeScreen(
     val context = LocalContext.current
     val framework by viewModel.framework.collectAsStateWithLifecycle()
     val managerInfo by viewModel.managerInfo.collectAsStateWithLifecycle()
-    val modules by viewModel.modules.collectAsStateWithLifecycle()
-    val upgradeCount by viewModel.upgradeCount.collectAsStateWithLifecycle()
-    val settings by viewModel.settings.collectAsStateWithLifecycle()
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
-    val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
-    var showRebootDialog by remember { mutableStateOf(false) }
-    var moreMenu by remember { mutableStateOf(false) }
 
     val binderAlive = framework.binderAlive
     val ready = !binderAlive || framework.versionCode >= 0
@@ -133,8 +109,6 @@ fun HomeScreen(
     val systemServerAbnormal = ready && binderAlive && !framework.systemServerRequested
     val partial = ready && binderAlive &&
         (dex2oatAbnormal || sepolicyAbnormal || systemServerAbnormal)
-    val enabledModules = modules.count { it.enabled }
-
     val apiValue = when {
         !binderAlive -> stringResource(R.string.not_installed)
         !ready -> stringResource(R.string.loading)
@@ -154,82 +128,18 @@ fun HomeScreen(
     }
     val installUrl = stringResource(R.string.install_url)
 
-    fun showMessage(message: String) {
-        scope.launch { snackbarHostState.showSnackbar(message) }
-    }
-
-    fun copyInfo() {
-        val info = buildString {
-            appendLine("${context.getString(R.string.app_name)} ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
-            appendLine()
-            appendLine("${context.getString(R.string.info_api_version)}: $apiValue")
-            appendLine("${context.getString(R.string.settings_xposed_api_call_protection)}: $protection")
-            appendLine("${context.getString(R.string.info_dex2oat_wrapper)}: $wrapper")
-            appendLine("${context.getString(R.string.info_framework_version)}: $frameworkVersion")
-            appendLine("${context.getString(R.string.info_manager_package_name)}: ${managerInfo.packageName}")
-            appendLine("${context.getString(R.string.info_system_version)}: ${managerInfo.systemVersion}")
-            appendLine("${context.getString(R.string.info_device)}: ${managerInfo.device}")
-            appendLine("${context.getString(R.string.info_system_abi)}: ${managerInfo.abi}")
-            appendLine("${context.getString(R.string.dark_mode)}: ${settings.themeMode}")
-        }
-        context.copyToClipboard("LSPosed", info)
-        showMessage(context.getString(R.string.info_copied))
-    }
-
     Scaffold(
         topBar = {
             ManagerTopBar(
                 title = stringResource(R.string.app_name),
                 scrollBehavior = scrollBehavior,
                 actions = {
-                    IconButton(onClick = { onNavigate(Routes.LOGS) }) {
-                        Icon(Icons.Outlined.ReceiptLong, contentDescription = stringResource(R.string.Logs))
-                    }
-                    Box {
-                        IconButton(onClick = { moreMenu = true }) {
-                            Icon(Icons.Outlined.MoreVert, contentDescription = null)
-                        }
-                        DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.About)) },
-                                leadingIcon = { Icon(Icons.Outlined.Info, null) },
-                                onClick = {
-                                    moreMenu = false
-                                    onNavigate(Routes.ABOUT)
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.report_issue)) },
-                                leadingIcon = { Icon(Icons.Outlined.BugReport, null) },
-                                onClick = {
-                                    moreMenu = false
-                                    context.openUrl("https://github.com/LSPosed/LSPosed/issues/new/choose")
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.copy_info)) },
-                                leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) },
-                                onClick = {
-                                    moreMenu = false
-                                    copyInfo()
-                                },
-                            )
-                            if (binderAlive) {
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.home_reboot)) },
-                                    leadingIcon = { Icon(Icons.Outlined.RestartAlt, null) },
-                                    onClick = {
-                                        moreMenu = false
-                                        showRebootDialog = true
-                                    },
-                                )
-                            }
-                        }
+                    IconButton(onClick = { onNavigate(Routes.ABOUT) }) {
+                        Icon(Icons.Outlined.Info, contentDescription = stringResource(R.string.About))
                     }
                 },
             )
         },
-        snackbarHost = { SnackBarHost(hostState = snackbarHostState) },
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
         contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
     ) { padding ->
@@ -280,67 +190,6 @@ fun HomeScreen(
 
             SegmentedColumn(
                 modifier = Modifier.fillMaxWidth(),
-                title = stringResource(R.string.quick_actions),
-            ) {
-                item {
-                    HomeLink(
-                        icon = Icons.Outlined.Extension,
-                        title = stringResource(R.string.Modules),
-                        summary = when {
-                            !binderAlive -> stringResource(R.string.not_installed_summary)
-                            enabledModules > 0 -> pluralStringResource(R.plurals.modules_enabled_count, enabledModules, enabledModules)
-                            else -> stringResource(R.string.no_module_enabled)
-                        },
-                        onClick = { onNavigate(Routes.MODULES) },
-                    )
-                }
-                item {
-                    HomeLink(
-                        icon = Icons.Outlined.Storefront,
-                        title = stringResource(R.string.module_repo),
-                        summary = if (upgradeCount > 0) {
-                            pluralStringResource(R.plurals.module_repo_upgradable, upgradeCount, upgradeCount)
-                        } else {
-                            stringResource(R.string.module_repo_up_to_date)
-                        },
-                        onClick = { onNavigate(Routes.REPOSITORY) },
-                    )
-                }
-                item {
-                    HomeLink(
-                        icon = Icons.Outlined.ReceiptLong,
-                        title = stringResource(R.string.Logs),
-                        summary = if (framework.verboseLog) {
-                            stringResource(R.string.enabled_verbose_log)
-                        } else {
-                            stringResource(R.string.disabled_verbose_log)
-                        },
-                        onClick = { onNavigate(Routes.LOGS) },
-                    )
-                }
-                item {
-                    HomeLink(
-                        icon = Icons.Outlined.Settings,
-                        title = stringResource(R.string.Settings),
-                        summary = stringResource(R.string.settings_group_theme),
-                        onClick = { onNavigate(Routes.SETTINGS) },
-                    )
-                }
-                if (binderAlive) {
-                    item {
-                        HomeLink(
-                            icon = Icons.Outlined.RestartAlt,
-                            title = stringResource(R.string.home_reboot),
-                            summary = null,
-                            onClick = { showRebootDialog = true },
-                        )
-                    }
-                }
-            }
-
-            SegmentedColumn(
-                modifier = Modifier.fillMaxWidth(),
-                title = stringResource(R.string.home_info),
             ) {
                 item { InfoItem(Icons.Outlined.Tag, stringResource(R.string.info_api_version), apiValue) }
                 item {
@@ -374,38 +223,27 @@ fun HomeScreen(
                 }
                 item { InfoItem(Icons.Outlined.PhoneAndroid, stringResource(R.string.info_device), managerInfo.device) }
                 item { InfoItem(Icons.Outlined.Memory, stringResource(R.string.info_system_abi), managerInfo.abi) }
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            SegmentedColumn(modifier = Modifier.fillMaxWidth()) {
                 item {
-                    SegmentedListItem(
-                        onClick = ::copyInfo,
-                        headlineContent = { Text(stringResource(R.string.copy_info)) },
-                        leadingContent = { Icon(Icons.Outlined.ContentCopy, null) },
-                        trailingContent = {
-                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null)
+                    HomeLink(
+                        icon = Icons.Outlined.ReceiptLong,
+                        title = stringResource(R.string.Logs),
+                        summary = if (framework.verboseLog) {
+                            stringResource(R.string.enabled_verbose_log)
+                        } else {
+                            stringResource(R.string.disabled_verbose_log)
                         },
+                        onClick = { onNavigate(Routes.LOGS) },
                     )
                 }
             }
 
-            Text(
-                text = "${stringResource(R.string.app_name)} ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp, bottom = 24.dp),
-            )
+            Spacer(Modifier.height(24.dp))
         }
-    }
-
-    if (showRebootDialog) {
-        ConfirmDialog(
-            title = stringResource(R.string.home_reboot),
-            text = stringResource(R.string.home_reboot_message),
-            confirmText = stringResource(R.string.reboot),
-            dismissText = stringResource(R.string.cancel),
-            onConfirm = { ManagerRepository.reboot() },
-            onDismiss = { showRebootDialog = false },
-        )
     }
 }
 

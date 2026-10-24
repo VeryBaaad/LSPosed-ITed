@@ -77,9 +77,9 @@ public class RepoLoader {
     private final Set<RepoListener> listeners = ConcurrentHashMap.newKeySet();
     private boolean repoLoaded = false;
     private static final String originRepoUrl = "https://modules.lsposed.org/";
-    private static final String backupRepoUrl = "https://modules-blogcdn.lsposed.org/";
+    private static final String backupRepoUrl = "https://backup.modules.lsposed.org/";
 
-    private static final String secondBackupRepoUrl = "https://modules-cloudflare.lsposed.org/";
+    private static final String secondBackupRepoUrl = "https://xposed-modules-repo.github.io/modules/";
     private static String repoUrl = originRepoUrl;
     private final Resources resources = App.getInstance().getResources();
     private final String[] channels = resources.getStringArray(R.array.update_channel_values);
@@ -98,36 +98,39 @@ public class RepoLoader {
 
     synchronized public void loadRemoteData() {
         repoLoaded = false;
-        try {
-            try (var response = App.getOkHttpClient().newCall(new Request.Builder().url(repoUrl + "modules.json").build()).execute()) {
-
-                if (response.isSuccessful()) {
-                    ResponseBody body = response.body();
-                    if (body != null) {
-                        try {
-                            String bodyString = body.string();
-                            Files.write(repoFile, bodyString.getBytes(StandardCharsets.UTF_8));
-                            loadLocalData(false);
-                        } catch (Throwable t) {
-                            Log.e(App.TAG, Log.getStackTraceString(t));
-                            for (RepoListener listener : listeners) {
-                                listener.onThrowable(t);
-                            }
-                        }
-                    }
+        String[] urls = {originRepoUrl, backupRepoUrl, secondBackupRepoUrl};
+        Throwable lastError = null;
+        for (String url : urls) {
+            try (var response = App.getOkHttpClient()
+                    .newCall(new Request.Builder().url(url + "modules.json").build())
+                    .execute()) {
+                if (!response.isSuccessful()) {
+                    lastError = new IOException("HTTP " + response.code() + " from " + url);
+                    continue;
                 }
+                ResponseBody body = response.body();
+                if (body == null) {
+                    lastError = new IOException("Empty response from " + url);
+                    continue;
+                }
+                try {
+                    String bodyString = body.string();
+                    Files.write(repoFile, bodyString.getBytes(StandardCharsets.UTF_8));
+                    repoUrl = url;
+                    loadLocalData(false);
+                    return;
+                } catch (Throwable t) {
+                    Log.e(App.TAG, Log.getStackTraceString(t));
+                    lastError = t;
+                }
+            } catch (Throwable e) {
+                Log.e(App.TAG, "load remote data from " + url, e);
+                lastError = e;
             }
-        } catch (Throwable e) {
-            Log.e(App.TAG, "load remote data", e);
+        }
+        if (lastError != null) {
             for (RepoListener listener : listeners) {
-                listener.onThrowable(e);
-            }
-            if (repoUrl.equals(originRepoUrl)) {
-                repoUrl = backupRepoUrl;
-                loadRemoteData();
-            } else if (repoUrl.equals(backupRepoUrl)) {
-                repoUrl = secondBackupRepoUrl;
-                loadRemoteData();
+                listener.onThrowable(lastError);
             }
         }
     }
@@ -284,6 +287,18 @@ public class RepoLoader {
                             for (RepoListener listener : listeners) {
                                 listener.onThrowable(t);
                             }
+                        }
+                    }
+                } else {
+                    if (repoUrl.equals(originRepoUrl)) {
+                        repoUrl = backupRepoUrl;
+                        loadRemoteReleases(packageName);
+                    } else if (repoUrl.equals(backupRepoUrl)) {
+                        repoUrl = secondBackupRepoUrl;
+                        loadRemoteReleases(packageName);
+                    } else {
+                        for (RepoListener listener : listeners) {
+                            listener.onThrowable(new IOException("HTTP " + response.code()));
                         }
                     }
                 }

@@ -40,6 +40,8 @@
     <string name="accent_color_summary">Color used when dynamic color is off</string>
     <string name="pure_black">Pure black</string>
     <string name="pure_black_summary">Use pure black surfaces in dark mode</string>
+    <string name="color_style">Color style</string>
+    <string name="color_spec">Color standard</string>
     <string name="settings_appearance">Appearance</string>
     <string name="settings_network">Network</string>
     <string name="settings_about">About</string>

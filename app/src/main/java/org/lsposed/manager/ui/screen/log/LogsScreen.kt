@@ -82,7 +82,6 @@ import org.lsposed.manager.R
 import org.lsposed.manager.data.repository.SettingsRepository
 import org.lsposed.manager.receivers.LSPManagerServiceHolder
 import org.lsposed.manager.ui.component.ConfirmDialog
-import org.lsposed.manager.ui.component.EmptyState
 import org.lsposed.manager.ui.component.DetailTopBar
 import org.lsposed.manager.ui.component.material.ExpressiveTabRow
 import org.lsposed.manager.ui.viewmodel.ManagerViewModel
@@ -231,12 +230,7 @@ fun LogsScreen(viewModel: ManagerViewModel, onBack: () -> Unit) {
                     }
                 }
                 logs.isEmpty() -> {
-                    EmptyState(
-                        icon = Icons.Outlined.WrapText,
-                        title = stringResource(R.string.logs_empty),
-                        summary = stringResource(R.string.logs_empty_summary),
-                        modifier = Modifier.fillMaxSize(),
-                    )
+                    Box(modifier = Modifier.fillMaxSize())
                 }
                 else -> {
                     SelectionContainer(

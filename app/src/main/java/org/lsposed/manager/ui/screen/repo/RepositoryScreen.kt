@@ -39,7 +39,6 @@ import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Sort
-import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.DropdownMenuItem
@@ -72,7 +71,6 @@ import kotlinx.coroutines.delay
 import org.lsposed.manager.R
 import org.lsposed.manager.data.model.RepoItem
 import org.lsposed.manager.data.repository.SettingsRepository
-import org.lsposed.manager.ui.component.EmptyState
 import org.lsposed.manager.ui.component.ManagerTopBar
 import org.lsposed.manager.ui.component.SearchField
 import org.lsposed.manager.ui.component.material.StatusTagMaterial
@@ -83,7 +81,6 @@ import org.lsposed.manager.ui.viewmodel.ManagerViewModel
 @Composable
 fun RepositoryScreen(viewModel: ManagerViewModel, onOpenModule: (String) -> Unit) {
     val repo by viewModel.repoItems.collectAsStateWithLifecycle()
-    val loaded by viewModel.repoLoaded.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
@@ -91,6 +88,12 @@ fun RepositoryScreen(viewModel: ManagerViewModel, onOpenModule: (String) -> Unit
     var query by remember { mutableStateOf("") }
     var sortMenu by remember { mutableStateOf(false) }
     var refreshing by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        if (!viewModel.repoLoaded.value) {
+            viewModel.refreshRepo(remote = true)
+        }
+    }
 
     LaunchedEffect(refreshing) {
         if (refreshing) {
@@ -112,6 +115,7 @@ fun RepositoryScreen(viewModel: ManagerViewModel, onOpenModule: (String) -> Unit
                 title = stringResource(R.string.module_repo),
                 scrollBehavior = scrollBehavior,
                 actions = {
+                    if (repo.isNotEmpty()) {
                     Box {
                         IconButton(onClick = { sortMenu = true }) {
                             Icon(Icons.Outlined.Sort, contentDescription = stringResource(R.string.sort))
@@ -149,6 +153,7 @@ fun RepositoryScreen(viewModel: ManagerViewModel, onOpenModule: (String) -> Unit
                             )
                         }
                     }
+                    }
                 },
             )
         },
@@ -162,12 +167,14 @@ fun RepositoryScreen(viewModel: ManagerViewModel, onOpenModule: (String) -> Unit
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .fillMaxSize(),
         ) {
-            SearchField(
-                value = query,
-                onValueChange = { query = it },
-                placeholder = stringResource(R.string.repo_search_hint),
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            )
+            if (repo.isNotEmpty()) {
+                SearchField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = stringResource(R.string.repo_search_hint),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
 
             PullToRefreshBox(
                 isRefreshing = refreshing,
@@ -179,35 +186,18 @@ fun RepositoryScreen(viewModel: ManagerViewModel, onOpenModule: (String) -> Unit
                     .weight(1f)
                     .fillMaxWidth(),
             ) {
-                when {
-                    !loaded && filtered.isEmpty() -> {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(
-                                stringResource(R.string.repo_loading),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                if (filtered.isNotEmpty()) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
+                        verticalArrangement = Arrangement.spacedBy(13.dp),
+                    ) {
+                        items(filtered, key = { it.packageName }) { item ->
+                            RepoModuleCard(item, onClick = { onOpenModule(item.packageName) })
                         }
                     }
-                    filtered.isEmpty() -> {
-                        EmptyState(
-                            icon = Icons.Outlined.Storefront,
-                            title = stringResource(R.string.no_repo_modules),
-                            summary = stringResource(R.string.no_repo_modules_summary),
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    }
-                    else -> {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            items(filtered, key = { it.packageName }) { item ->
-                                RepoModuleCard(item, onClick = { onOpenModule(item.packageName) })
-                            }
-                        }
-                    }
+                } else {
+                    Box(modifier = Modifier.fillMaxSize())
                 }
             }
         }

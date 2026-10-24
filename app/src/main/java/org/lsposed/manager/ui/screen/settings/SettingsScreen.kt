@@ -70,6 +70,8 @@ import org.lsposed.manager.App
 import org.lsposed.manager.BuildConfig
 import org.lsposed.manager.ConfigManager
 import org.lsposed.manager.R
+import com.materialkolor.PaletteStyle
+import com.materialkolor.dynamiccolor.ColorSpec
 import org.lsposed.manager.data.repository.KeyColors
 import org.lsposed.manager.data.repository.SettingsRepository
 import org.lsposed.manager.data.repository.ThemeMode
@@ -168,6 +170,13 @@ fun SettingsScreen(viewModel: ManagerViewModel, onAbout: () -> Unit) {
     )
     val themeModes = ThemeMode.entries
     val colorLabels = KeyColors.map { stringResource(it.labelRes) }
+    val paletteStyleLabels = PaletteStyle.entries.map { it.name }
+    val colorSpecLabels = ColorSpec.SpecVersion.entries.map {
+        when (it) {
+            ColorSpec.SpecVersion.SPEC_2025 -> "2025 (Expressive)"
+            ColorSpec.SpecVersion.SPEC_2021 -> "2021 (Material 3)"
+        }
+    }
     val channelLabels = listOf(
         stringResource(R.string.update_channel_stable),
         stringResource(R.string.update_channel_bate),
@@ -227,6 +236,24 @@ fun SettingsScreen(viewModel: ManagerViewModel, onAbout: () -> Unit) {
                         selectedIndex = KeyColors.indexOfFirst { it.value == settings.keyColor.value }
                             .coerceAtLeast(0),
                         onItemSelected = { SettingsRepository.setKeyColor(KeyColors[it]) },
+                    )
+                }
+                item {
+                    SegmentedDropdownItem(
+                        icon = Icons.Outlined.Palette,
+                        title = stringResource(R.string.color_style),
+                        items = paletteStyleLabels,
+                        selectedIndex = PaletteStyle.entries.indexOf(settings.paletteStyle),
+                        onItemSelected = { SettingsRepository.setPaletteStyle(PaletteStyle.entries[it]) },
+                    )
+                }
+                item {
+                    SegmentedDropdownItem(
+                        icon = Icons.Outlined.Palette,
+                        title = stringResource(R.string.color_spec),
+                        items = colorSpecLabels,
+                        selectedIndex = ColorSpec.SpecVersion.entries.indexOf(settings.colorSpec),
+                        onItemSelected = { SettingsRepository.setColorSpec(ColorSpec.SpecVersion.entries[it]) },
                     )
                 }
                 item {
