@@ -141,14 +141,6 @@ class ManagerViewModel(application: Application) : AndroidViewModel(application)
                         context.getString(R.string.warning_xposed_min_version, module.minVersion)
                     module.targetVersion > apiVersion ->
                         context.getString(R.string.warning_target_version_higher, module.targetVersion)
-                    !module.legacy && apiVersion > 0 &&
-                        module.targetVersion >= ModuleUtil.MIN_OUTDATED_MODERN_MODULE_API &&
-                        module.targetVersion < apiVersion ->
-                        context.getString(
-                            R.string.warning_min_version_too_low,
-                            module.minVersion,
-                            apiVersion,
-                        )
                     module.minVersion < ModuleUtil.MIN_MODULE_VERSION ->
                         context.getString(
                             R.string.warning_min_version_too_low,
