@@ -33,6 +33,7 @@
 #include <dobby.h>
 #endif
 #include <list>
+#include <algorithm>
 #include <dlfcn.h>
 #include "native_util.h"
 #include "elf_util.h"
@@ -92,6 +93,11 @@ namespace lspd {
             });
         }();
         if (!initialized) [[unlikely]] return;
+        if (std::find(moduleNativeLibs.begin(), moduleNativeLibs.end(), library_name) !=
+            moduleNativeLibs.end()) {
+            LOGD("native_api: {} is already registered", library_name);
+            return;
+        }
         LOGD("native_api: Registered {}", library_name);
         moduleNativeLibs.push_back(library_name);
     }

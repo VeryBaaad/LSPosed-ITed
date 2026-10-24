@@ -17,6 +17,7 @@
  * Copyright (C) 2022 LSPosed Contributors
  */
 
+#include "config_bridge.h"
 #include "hook_bridge.h"
 #include "native_util.h"
 #include "lsplant.hpp"
@@ -715,10 +716,68 @@ LSP_DEF_NATIVE_METHOD(jboolean, HookBridge, unhookMethod, jobject hookMethod, jo
     return JNI_FALSE;
 }
 
+LSP_DEF_NATIVE_METHOD(jboolean, HookBridge, replaceCallback, jboolean useModernApi100,
+                      jobject hookMethod, jobject oldCallback, jobject newCallback,
+                      jint newPriority) {
+    auto target = env->FromReflectedMethod(hookMethod);
+    HookItem *hook_item = nullptr;
+    hooked_methods.if_contains(target, [&hook_item](const auto &it) {
+        hook_item = it.second.get();
+    });
+    if (!hook_item) return JNI_FALSE;
+
+    jobject backup = hook_item->GetBackup();
+    if (!backup) return JNI_FALSE;
+
+    JNIMonitor monitor(env, backup);
+
+    if (useModernApi100) {
+        if (before_method_field == nullptr) return JNI_FALSE;
+        auto old_before_method = JNI_GetObjectField(env, oldCallback, before_method_field);
+        auto old_before = env->FromReflectedMethod(old_before_method.get());
+        auto new_before_method = JNI_GetObjectField(env, newCallback, before_method_field);
+        auto new_after_method = JNI_GetObjectField(env, newCallback, after_method_field);
+        if (!new_before_method.get() || !new_after_method.get()) return JNI_FALSE;
+        for (auto i = hook_item->modern100_callbacks.begin();
+             i != hook_item->modern100_callbacks.end(); ++i) {
+            if (i->second.before_method != old_before) continue;
+            auto replacement = ModuleCallback{
+                    .before_method = env->FromReflectedMethod(new_before_method.get()),
+                    .after_method = env->FromReflectedMethod(new_after_method.get()),
+            };
+            if (i->first == newPriority) {
+                i->second = replacement;
+            } else {
+                hook_item->modern100_callbacks.erase(i);
+                hook_item->modern100_callbacks.emplace(newPriority, replacement);
+            }
+            return JNI_TRUE;
+        }
+        return JNI_FALSE;
+    }
+
+    for (auto i = hook_item->callbacks.begin(); i != hook_item->callbacks.end(); ++i) {
+        if (!env->IsSameObject(i->second, oldCallback)) continue;
+
+        auto replacement = env->NewGlobalRef(newCallback);
+        if (!replacement) return JNI_FALSE;
+
+        env->DeleteGlobalRef(i->second);
+        if (i->first == newPriority) {
+            i->second = replacement;
+        } else {
+            hook_item->callbacks.erase(i);
+            hook_item->callbacks.emplace(newPriority, replacement);
+        }
+        return JNI_TRUE;
+    }
+
+    return JNI_FALSE;
+}
+
 LSP_DEF_NATIVE_METHOD(jboolean, HookBridge, deoptimizeMethod, jobject hookMethod) {
     return lsplant::Deoptimize(env, hookMethod);
 }
-
 LSP_DEF_NATIVE_METHOD(jobject, HookBridge, invokeOriginalMethod, jobject hookMethod,
                       jobject thiz, jobjectArray args, jboolean isConstructor) {
     auto &cache = GetInvokeCache(env);
@@ -832,6 +891,35 @@ LSP_DEF_NATIVE_METHOD(jobjectArray, HookBridge, oldCallbackSnapshot, jclass call
     return res;
 }
 
+LSP_DEF_NATIVE_METHOD(jobjectArray, HookBridge, legacyApiPrefixes) {
+    static constexpr const char *kLegacyKeys[] = {
+            "de.robv.android.xposed.",
+            "android.app.AndroidApp",
+            "android.content.res.XRes",
+            "android.content.res.XModule",
+    };
+
+    const auto count = static_cast<jsize>(arraysize(kLegacyKeys));
+    auto string_class = env->FindClass("java/lang/String");
+    if (!string_class) return nullptr;
+    auto result = env->NewObjectArray(count, string_class, nullptr);
+    env->DeleteLocalRef(string_class);
+    if (!result) return nullptr;
+
+    auto *bridge = ConfigBridge::GetInstance();
+    for (jsize i = 0; i < count; ++i) {
+        std::string name = kLegacyKeys[i];
+        if (bridge) {
+            const auto &map = bridge->obfuscation_map();
+            if (auto it = map.find(name); it != map.end()) name = it->second;
+        }
+        auto value = env->NewStringUTF(name.c_str());
+        env->SetObjectArrayElement(result, i, value);
+        env->DeleteLocalRef(value);
+    }
+    return result;
+}
+
 static JNINativeMethod gMethods[] = {
     LSP_NATIVE_METHOD(HookBridge, hookMethod, "(Ljava/lang/reflect/Executable;Ljava/lang/Class;ILjava/lang/Object;Z)Z"),
     LSP_NATIVE_METHOD(HookBridge, unhookMethod, "(Ljava/lang/reflect/Executable;Ljava/lang/Object;Z)Z"),
@@ -851,6 +939,9 @@ static JNINativeMethod gMethods[] = {
     LSP_NATIVE_METHOD(HookBridge, setTrusted, "(Ljava/lang/Object;)Z"),
     LSP_NATIVE_METHOD(HookBridge, callbackSnapshot, "(Ljava/lang/reflect/Executable;I)[Ljava/lang/Object;"),
     LSP_NATIVE_METHOD(HookBridge, oldCallbackSnapshot, "(Ljava/lang/Class;Ljava/lang/reflect/Executable;)[[Ljava/lang/Object;"),
+    LSP_NATIVE_METHOD(HookBridge, replaceCallback,
+                      "(ZLjava/lang/reflect/Executable;Ljava/lang/Object;Ljava/lang/Object;I)Z"),
+    LSP_NATIVE_METHOD(HookBridge, legacyApiPrefixes, "()[Ljava/lang/String;"),
 };
 
 void RegisterHookBridge(JNIEnv *env) {

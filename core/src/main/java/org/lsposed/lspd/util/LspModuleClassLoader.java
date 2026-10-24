@@ -26,6 +26,7 @@ import java.util.jar.JarFile;
 import java.util.zip.ZipEntry;
 
 import hidden.ByteBufferDexClassLoader;
+import org.lsposed.lspd.nativebridge.HookBridge;
 import sun.misc.CompoundEnumeration;
 
 @SuppressWarnings("ConstantConditions")
@@ -35,6 +36,30 @@ public final class LspModuleClassLoader extends ByteBufferDexClassLoader {
             splitPaths(System.getProperty("java.library.path"));
     private final String apk;
     private final List<File> nativeLibraryDirs = new ArrayList<>();
+    private final Boolean blockLegacyApi;
+
+    private static volatile String[] legacyApiPrefixes;
+
+    private static String[] legacyApiPrefixes() {
+        var prefixes = legacyApiPrefixes;
+        if (prefixes != null) return prefixes;
+        synchronized (LspModuleClassLoader.class) {
+            if (legacyApiPrefixes == null) {
+                try {
+                    legacyApiPrefixes = HookBridge.legacyApiPrefixes();
+                } catch (Throwable t) {
+                    Log.w(TAG, "Cannot resolve the legacy API prefixes", t);
+                    legacyApiPrefixes = new String[]{
+                            "de.robv.android.xposed.",
+                            "android.app.AndroidApp",
+                            "android.content.res.XRes",
+                            "android.content.res.XModule",
+                    };
+                }
+            }
+            return legacyApiPrefixes;
+        }
+    }
 
     private static List<File> splitPaths(String searchPath) {
         var result = new ArrayList<File>();
@@ -47,19 +72,23 @@ public final class LspModuleClassLoader extends ByteBufferDexClassLoader {
 
     private LspModuleClassLoader(ByteBuffer[] dexBuffers,
                                  ClassLoader parent,
-                                 String apk) {
+                                 String apk,
+                                 Boolean blockApiWhenLegacy) {
         super(dexBuffers, parent);
         this.apk = apk;
+        this.blockLegacyApi = blockApiWhenLegacy;
     }
 
     @RequiresApi(Build.VERSION_CODES.Q)
     private LspModuleClassLoader(ByteBuffer[] dexBuffers,
                                  String librarySearchPath,
                                  ClassLoader parent,
-                                 String apk) {
+                                 String apk,
+                                 Boolean blockApiWhenLegacy) {
         super(dexBuffers, librarySearchPath, parent);
         initNativeLibraryDirs(librarySearchPath);
         this.apk = apk;
+        this.blockLegacyApi = blockApiWhenLegacy;
     }
 
     private void initNativeLibraryDirs(String librarySearchPath) {
@@ -69,6 +98,49 @@ public final class LspModuleClassLoader extends ByteBufferDexClassLoader {
 
     @Override
     protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+        if (blockLegacyApi) {
+            /*
+                                        :==.                      .==:
+                                       +**#.                     -%+=***=:
+                                     :#*+#.                     :%=----=+**+:    .:-.
+                                    #*%*%.                     #*-=====--*#: -**=---=#*
+                                   :##@*%                     *#-=====-=#%*##*=--===--*#:
+                                   :##@*%-   ...::::....     *#-==-=--*@@%%#=--=======-=#=
+                 +*#%%%@@@@@@@@%%%%%%#+##*%%@@@@@@@@@@@@@%%%@*=----*@@@#=--====---=+**+-.
+          =+++=--@+%@@@@@@@@@@@@@@@@@@@%#*#@@@@@@@@@@@@@@@@@@@@%*+#@@#=--==----=+##-.
+         =#====+**#%@@@@@@@@@@@@@@@@@@@@@%++%@@@@@@@@@@@@@@@@@@@@@@@*--=---=+*%@%@*-=+:
+         +*+++====---=%@@@@@@@%%@@@@@@%%%%%%@%%@@@%%%%%%%@@@@@@@%%@@@@@%@%#*+==-------%-
+      ....:--===+####%@@@@@@%%@@@@@@%#####################%@@@@@@@%%@@@@#-----====----**
+     **+**++++++=#@%@@@@@@%%@@@@@@#*#%%%@@@@@@@@@@%%@@@@%%%%@@@@@@@%%@@@#--------=====+%
+     %+-=====-----------=@%%%%%%#####**@@@@@@@@@@@@@@@@@@@@@@%@@@@%@@@%%@@@@@*%=
+     #+-=====-----------*%*%%#%#+*####+*%##%#%%%%%%%%%%@@@@@@@%@@@@%@@@%%@@@@%*#
+     **------====++**#%%#*#@@@@%+*###*+#@%@@@@@%%%%#%%%%%####%##%%%%%%@@@%@@@@*%:
+      .---:.  :=+*+=----+%%@@%%%+*#++++##@@%@@@%%%%+*%#=*#%@%@***#@%*+#+%@%@@@%**
+            +**+=---==-=*%#*#**+###**=#@=#@%%@@%%%@*+%@+##%@@@#++*#****%@@@%@@@*#              .+=+
+           .%+---==--=*%#*+==#%*+***=*#%**%@%@@@%%@#*#*+%%##%%@#***##%%@@@@%%@@*%             :##*##
+              =#+*%%@@+***#+*#**@*+*++==+==%%####=-+**#*****=+%%+@@@%%%%%@@@%@@*#        .#*##%@@@@+
+               .:-%*@**#+@#***%+-=+**####*%@@@@@@%@#*######*%*@%*@@@%%%%%@@@%%@*%:      -#*%@@@@@@@#
+                  #*#*%+#@**#*@*+@*######**@@@@@@@@+#%%%%%%**@@*@@@@%%%%%@@@%%@*%-   .=###@@@@@@@@%%
+                  %*%@+%@@#*@*##%*+*######@@@%%@@@@@%######%%+*#*%%%%%%%@%##%@@##%*##%@@@@@@@@@@%%%%
+                 :#*@#*@@%%+@#**#%**###%%@%*####*#**@@@@%@@%%%%#*@%%%%%%%#%@@@@%#%#%@@@@@@@@@@%%%%%%
+                 :#*@*%%@@%*##+%*#%@@@@%@@@+#%%%###*@@@@%%%@@%%*#@%%%%%%%%%@@@@@+#@@@@@@@@@@%%%%%%%%
+                   -=*#*#*%%%%@%@%%@%#####%%%%##%%@@@%%%%*#%%%@##%%%#%@%%%@@@@@@%@@@@@@%%%%%%%%%%%%%
+                      :@*@@%%%%%%%%@@@@%*#%%%%#*%@%%@#*%%*@@%%@*%@@@%%%%%%%@@@@@%%@@%%%%%%%%%%%%%%%%
+                      +*#@@%%%%%#@@@@@#*%%%#*+*%%%%%%@%#+%@%%@*#@@@@%%%%%%%@@@@@%%@%%%%%%%%%%%%%%%%%
+                    -%*@@@%%%%%@@@@*#%##@@@*%*@@@@@@@@##@@%@#+#@@@@@@#%%%%%%@@@@@%%%%%%%%%%%%%%%%%%%
+                   -%*@@@%%%%@@@@@*#%*%@@#+##*%%%%%%%##@@%@#*@##@@@@@%%%%%%%@@@@@%%@%%%%%%%%%%%%%%%%
+                  :%*@@@%%%%@@@@@+%%*%@%##@@%%@%%%%%**@@%@#*@@@##@@@@@%%%%%%%@@@@@#%%%%%%%%%%%%%%%%%
+                 **%@@@%+%@@@@@%*%*@@@@@**%%%#%%#%#+#%@@#+*@@@@@@*@@@@@@%%%%%%%@@@@%%%%%%%%%%%%%%%%@
+                -#*@@%#*##@@@@@#**%@@@@**@@@#=*#+%#*=#@#+%*#@@@@@%*@@@@@@%#%%%%%%@@@#%%%%%%%%%%%%%%%
+                **@@%%*@%*@@@@@%*@@@@@#*@@@@@%@@%@#=%*%*%@%*@@@@@@%#@@@@@@%%%%%%%@@@@%%%%%%%%%%%%%%@
+             */
+            for (var prefix : legacyApiPrefixes()) {
+                if (name.startsWith(prefix)) {
+                    throw new NullPointerException(
+                            name + " is unavailable to modules targeting Xposed API 102 or higher");
+                }
+            }
+        }
         var cl = findLoadedClass(name);
         if (cl != null) {
             return cl;
@@ -183,7 +255,8 @@ public final class LspModuleClassLoader extends ByteBufferDexClassLoader {
     public static ClassLoader loadApk(String apk,
                                       List<SharedMemory> dexes,
                                       String librarySearchPath,
-                                      ClassLoader parent) {
+                                      ClassLoader parent,
+                                      Boolean blockApiWhenLegacy) {
         var dexBuffers = dexes.stream().parallel().map(dex -> {
             try {
                 return dex.mapReadOnly();
@@ -194,9 +267,9 @@ public final class LspModuleClassLoader extends ByteBufferDexClassLoader {
         }).filter(Objects::nonNull).toArray(ByteBuffer[]::new);
         LspModuleClassLoader cl;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            cl = new LspModuleClassLoader(dexBuffers, librarySearchPath, parent, apk);
+            cl = new LspModuleClassLoader(dexBuffers, librarySearchPath, parent, apk, blockApiWhenLegacy);
         } else {
-            cl = new LspModuleClassLoader(dexBuffers, parent, apk);
+            cl = new LspModuleClassLoader(dexBuffers, parent, apk, blockApiWhenLegacy);
             cl.initNativeLibraryDirs(librarySearchPath);
         }
         Arrays.stream(dexBuffers).parallel().forEach(SharedMemory::unmap);

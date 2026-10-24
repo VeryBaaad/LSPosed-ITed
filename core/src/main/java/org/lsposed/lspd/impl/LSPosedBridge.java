@@ -524,14 +524,20 @@ public class LSPosedBridge {
     static class HookBuilderImpl implements XposedInterface.HookBuilder {
         private final XposedInterface context;
         private final Executable executable;
+        private final String moduleId;
+        private final java.util.function.BooleanSupplier frozen;
         private final XposedInterface.ExceptionMode defaultExceptionMode;
         private int priority = XposedInterface.PRIORITY_DEFAULT;
         private XposedInterface.ExceptionMode exceptionMode = XposedInterface.ExceptionMode.DEFAULT;
+        private String id = null;
 
-        HookBuilderImpl(XposedInterface context, Executable executable,
+        HookBuilderImpl(XposedInterface context, Executable executable, String moduleId,
+                        java.util.function.BooleanSupplier frozen,
                         XposedInterface.ExceptionMode defaultExceptionMode) {
             this.context = context;
             this.executable = executable;
+            this.moduleId = moduleId;
+            this.frozen = frozen;
             this.defaultExceptionMode = defaultExceptionMode;
         }
 
@@ -547,57 +553,83 @@ public class LSPosedBridge {
             return this;
         }
 
+        @Override
+        public XposedInterface.HookBuilder setId(@Nullable String id) {
+            this.id = id;
+            return this;
+        }
+
+        private void ensureNotFrozen() {
+            if (frozen != null && frozen.getAsBoolean()) {
+                throw new IllegalStateException(
+                        "This module generation has been retired by a hot reload and cannot register hooks");
+            }
+        }
+
         @NonNull
         @Override
         public XposedInterface.HookHandle intercept(@NonNull XposedInterface.Hooker hooker) {
-            if (exceptionMode == XposedInterface.ExceptionMode.PROTECTIVE
-                    || exceptionMode == XposedInterface.ExceptionMode.DEFAULT
-                    && defaultExceptionMode == XposedInterface.ExceptionMode.PROTECTIVE) {
-                hooker = new ProtectiveHooker(context, hooker);
+            if (hooker == null) throw new IllegalArgumentException("hooker should not be null!");
+            ensureNotFrozen();
+            checkHookable(executable);
+
+            var resolvedMode = exceptionMode == XposedInterface.ExceptionMode.DEFAULT
+                    ? defaultExceptionMode
+                    : exceptionMode;
+            var protective = resolvedMode == XposedInterface.ExceptionMode.PROTECTIVE;
+            var registered = (Object) (protective ? new ProtectiveHooker(context, hooker) : hooker);
+            var registration = new LSPosedHookHandle.Registration(
+                    hooker, registered, priority, resolvedMode, protective, id);
+
+            if (moduleId == null) return register(registration, null);
+
+            synchronized (LSPosedHookHandle.Registry.lockOf(moduleId)) {
+                ensureNotFrozen();
+
+                if (id != null) {
+                    var existing = LSPosedHookHandle.Registry.findId(moduleId, executable, id);
+                    if (existing != null && existing.isLive()) {
+                        return existing.swapLocked(registration);
+                    }
+                }
+                return register(registration, moduleId);
             }
-            return doHook(executable, priority, hooker);
         }
 
-        @Override
-        public XposedInterface.HookBuilder setId(@Nullable String id) {
-            TodoUtilsKt.notImplemented("API 102 is not supported");
-            return null;
+        private XposedInterface.HookHandle register(LSPosedHookHandle.Registration registration,
+                                                    @Nullable String moduleId) {
+            if (!HookBridge.hookMethod(executable, NativeHooker.class, registration.priority,
+                    registration.registered, false)) {
+                throw new io.github.libxposed.api.error.HookFailedError("Cannot hook " + executable);
+            }
+
+            var handle = new LSPosedHookHandle(context, executable, moduleId, registration);
+            if (moduleId != null) {
+                LSPosedHookHandle.Registry.track(moduleId, handle);
+                if (registration.id != null) {
+                    LSPosedHookHandle.Registry.claimId(moduleId, executable, registration.id, handle);
+                }
+            }
+            return handle;
         }
     }
 
-    static class HookHandleImpl implements XposedInterface.HookHandle {
-        private final Executable executable;
-        private final XposedInterface.Hooker hooker;
-
-        HookHandleImpl(Executable executable, XposedInterface.Hooker hooker) {
-            this.executable = executable;
-            this.hooker = hooker;
+    static void checkHookable(Executable hookMethod) {
+        if (Modifier.isAbstract(hookMethod.getModifiers())) {
+            throw new IllegalArgumentException("Cannot hook abstract methods: " + hookMethod);
+        } else if (hookMethod.getDeclaringClass().getClassLoader() == LSPosedContext.class.getClassLoader()) {
+            throw new IllegalArgumentException("Do not allow hooking inner methods");
+        } else if (hookMethod.getDeclaringClass() == Method.class && hookMethod.getName().equals("invoke")) {
+            throw new IllegalArgumentException("Cannot hook Method.invoke");
         }
+    }
 
-        @NonNull
-        @Override
-        public Executable getExecutable() {
-            return executable;
-        }
+    public static List<XposedInterface.HookHandle> snapshotHandles(String moduleId) {
+        return LSPosedHookHandle.Registry.liveHandles(moduleId);
+    }
 
-        @Override
-        public void unhook() {
-            HookBridge.unhookMethod(executable, hooker, false);
-        }
-
-        @Nullable
-        @Override
-        public String getId() {
-            TodoUtilsKt.notImplemented("API 102 is not supported");
-            return null;
-        }
-
-        @NonNull
-        @Override
-        public XposedInterface.HookHandle replaceHook(@NonNull XposedInterface.Hooker hooker) {
-            TodoUtilsKt.notImplemented("API 102 is not supported");
-            return null;
-        }
+    public static Object lockOf(String moduleId) {
+        return LSPosedHookHandle.Registry.lockOf(moduleId);
     }
 
     static class BaseInvoker<T extends Executable> {
@@ -725,7 +757,9 @@ public class LSPosedBridge {
         }
 
         if (HookBridge.hookMethod(hookMethod, LSPosedBridge.NativeHooker.class, priority, hooker, false)) {
-            return new HookHandleImpl(hookMethod, hooker);
+            return new LSPosedHookHandle(null, hookMethod, null,
+                    new LSPosedHookHandle.Registration(hooker, hooker, priority,
+                            XposedInterface.ExceptionMode.DEFAULT, false, null));
         }
         throw new io.github.libxposed.api.error.HookFailedError("Cannot hook " + hookMethod);
     }
@@ -827,13 +861,33 @@ public class LSPosedBridge {
             Executable executable,
             XposedInterface.ExceptionMode defaultExceptionMode
     ) {
+        return newHookBuilder(context, executable, null, null, defaultExceptionMode);
+    }
+
+    public static XposedInterface.HookBuilder newHookBuilder(
+            XposedInterface context,
+            Executable executable,
+            @Nullable String moduleId,
+            java.util.function.BooleanSupplier frozen,
+            XposedInterface.ExceptionMode defaultExceptionMode
+    ) {
         Objects.requireNonNull(executable, "origin must not be null");
-        return new HookBuilderImpl(context, executable, defaultExceptionMode);
+        return new HookBuilderImpl(context, executable, moduleId, frozen, defaultExceptionMode);
     }
 
     public static XposedInterface.HookBuilder newClassInitializerHookBuilder(
             XposedInterface context,
             Class<?> clazz,
+            XposedInterface.ExceptionMode defaultExceptionMode
+    ) {
+        return newClassInitializerHookBuilder(context, clazz, null, null, defaultExceptionMode);
+    }
+
+    public static XposedInterface.HookBuilder newClassInitializerHookBuilder(
+            XposedInterface context,
+            Class<?> clazz,
+            @Nullable String moduleId,
+            java.util.function.BooleanSupplier frozen,
             XposedInterface.ExceptionMode defaultExceptionMode
     ) {
         Objects.requireNonNull(clazz, "origin must not be null");
@@ -845,7 +899,7 @@ public class LSPosedBridge {
             if (classInitializer == null) {
                 throw new IllegalArgumentException("Cannot find class initializer for " + clazz);
             }
-            return new HookBuilderImpl(context, classInitializer, defaultExceptionMode);
+            return new HookBuilderImpl(context, classInitializer, moduleId, frozen, defaultExceptionMode);
         }
     }
 
